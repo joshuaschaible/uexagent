@@ -37,28 +37,28 @@ const EXAMPLE_SECTIONS = [
   {
     label: "🔄 Trading",
     questions: [
-      "Where should I sell Bexalite?",
-      "Buy Laranite on Hurston",
-      "I have 50000 aUEC, what should I trade?",
-      "Best trade route for Quantanium",
+      "Where's the best place to sell Laranite?",
+      "I have 50k aUEC, what should I trade?",
+      "What's the most profitable trade route right now?",
+      "Where can I buy Quantainium near Hurston?",
     ],
   },
   {
-    label: "📊 Market Data",
+    label: "📊 Market & Refining",
     questions: [
       "What's the most profitable commodity?",
-      "Show me all metals",
       "Compare Laranite prices in Stanton vs Pyro",
-      "Price history of Agricium",
+      "Where should I refine Quantainium?",
+      "What are the cheapest fuel prices in Stanton?",
     ],
   },
   {
     label: "🚀 Ships & Locations",
     questions: [
-      "Compare C2 vs Caterpillar",
-      "Best trades for my C2 and Caterpillar",
-      "Space stations in Stanton",
-      "Outposts on Hurston",
+      "Where can I buy the Caterpillar in-game?",
+      "What ships can I rent?",
+      "Tell me about the C2 Hercules",
+      "What space stations have a refinery?",
     ],
   },
 ];

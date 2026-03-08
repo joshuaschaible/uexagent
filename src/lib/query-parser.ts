@@ -28,6 +28,7 @@ export type Intent =
   | "fuel_prices"
   | "vehicle_buy"
   | "vehicle_rent"
+  | "help"
   | "unknown";
 
 export type ParsedQuery = {
@@ -153,12 +154,23 @@ const VEHICLE_RENT_KEYWORDS = [
   "rent a", "rent the", "rental price", "rental cost",
   "where can i rent", "ship rental",
 ];
+const HELP_KEYWORDS = [
+  "what can you do", "what do you do", "what can you help",
+  "what can i ask", "how can you help", "how do i use",
+  "what are your features", "what features", "show me what you can do",
+  "help me", "what are you", "what is this",
+];
 const MODIFIER_KEYWORDS = [
   "best", "cheapest", "highest", "lowest", "most", "top", "profitable", "both", "all",
 ];
 
 function detectIntent(text: string): Intent {
   const lower = text.toLowerCase();
+
+  // Check help (very specific, check first)
+  for (const kw of HELP_KEYWORDS) {
+    if (lower.includes(kw)) return "help";
+  }
 
   // Check fleet (very specific - "best trades for my C2 and Caterpillar")
   for (const kw of FLEET_KEYWORDS) {
@@ -333,9 +345,9 @@ export function parseQuery(
   }
   // Sort by order of appearance in query
   commodityMatches.sort((a, b) => a.startIndex - b.startIndex);
-  const foundCommodities = commodityMatches.map((m) => m.commodity);
-  const commodity = foundCommodities[0];
-  const commodities = foundCommodities.length > 0 ? foundCommodities : undefined;
+  let foundCommodities = commodityMatches.map((m) => m.commodity);
+  let commodity: Commodity | undefined = foundCommodities[0];
+  let commodities: Commodity[] | undefined = foundCommodities.length > 0 ? foundCommodities : undefined;
 
   // Try to find vehicle name(s), tracking consumed word indices so that
   // parts of an already-matched name (e.g. manufacturer "Drake") don't
@@ -395,13 +407,32 @@ export function parseQuery(
     locationQuery = locationQuery.replace(v.name.toLowerCase(), " ");
   }
 
-  // Try to find a star system
+  // Try to find a star system — check each query word against all known systems
   let starSystem: StarSystem | undefined;
-  const systemNames = ["stanton", "pyro", "nyx", "terra", "sol"];
-  for (const sysName of systemNames) {
-    if (locationQuery.includes(sysName)) {
-      starSystem = findStarSystem(sysName, starSystemMap);
-      break;
+  const locationWords = locationQuery.replace(/[?!.,]/g, "").split(/\s+/);
+  for (let windowSize = 2; windowSize >= 1; windowSize--) {
+    for (let i = 0; i <= locationWords.length - windowSize; i++) {
+      const phrase = locationWords.slice(i, i + windowSize).join(" ");
+      if (isCommonWord(phrase)) continue;
+      const found = findStarSystem(phrase, starSystemMap);
+      if (found) {
+        starSystem = found;
+        break;
+      }
+    }
+    if (starSystem) break;
+  }
+
+  // Disambiguate: if a star system was found and the commodity was a fuzzy match
+  // of similar text, the system wins (e.g. "Taranis" system vs "Taranite" commodity).
+  // Drop the commodity if its name doesn't appear verbatim in the query.
+  if (starSystem && commodity) {
+    const commodityNorm = commodity.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const queryNorm = lower.replace(/[^a-z0-9 ]/g, "");
+    if (!queryNorm.includes(commodityNorm)) {
+      foundCommodities = foundCommodities.filter((c) => c.id !== commodity!.id);
+      commodity = foundCommodities[0];
+      commodities = foundCommodities.length > 0 ? foundCommodities : undefined;
     }
   }
 
@@ -516,13 +547,13 @@ export function parseQuery(
   // Try to find a second star system for price comparison ("Iron in Stanton vs Pyro")
   let starSystem2: StarSystem | undefined;
   if (intent === "price_compare" && starSystem) {
-    for (const sysName of systemNames) {
-      if (locationQuery.includes(sysName)) {
-        const found = findStarSystem(sysName, starSystemMap);
-        if (found && found.id !== starSystem.id) {
-          starSystem2 = found;
-          break;
-        }
+    for (let i = 0; i <= locationWords.length - 1; i++) {
+      const word = locationWords[i];
+      if (isCommonWord(word)) continue;
+      const found = findStarSystem(word, starSystemMap);
+      if (found && found.id !== starSystem.id) {
+        starSystem2 = found;
+        break;
       }
     }
   }

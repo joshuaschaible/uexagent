@@ -54,7 +54,7 @@ const VALID_INTENTS = new Set<string>([
   "terminal_info", "station_info", "city_info", "outpost_info",
   "location_info", "budget_trade", "location_trade", "price_compare",
   "fleet_trade", "refinery_yields", "refinery_method", "fuel_prices",
-  "vehicle_buy", "vehicle_rent", "unknown",
+  "vehicle_buy", "vehicle_rent", "help", "unknown",
 ]);
 
 // --- Build system prompt ---
@@ -119,6 +119,7 @@ Return JSON with this exact structure:
 - fuel_prices: User wants fuel prices (hydrogen or quantum). Optional: star_system, planet
 - vehicle_buy: User wants to buy a ship in-game with aUEC (not pledge store). Needs: vehicle
 - vehicle_rent: User wants to rent a ship in-game. Needs: vehicle
+- help: User asks what you can do, your features, or how to use you
 - unknown: Cannot determine intent.
 
 ## Important rules

@@ -1927,30 +1927,47 @@ async function handleFleetTrade(query: ParsedQuery): Promise<HandlerResult> {
   };
 }
 
+const HELP_TEXT =
+  `**Trading**\n` +
+  `- "Where's the best place to sell Laranite?"\n` +
+  `- "Where can I buy Quantainium near Hurston?"\n` +
+  `- "I have 50k aUEC, what should I trade?"\n` +
+  `- "What's the most profitable trade route right now?"\n` +
+  `- "I'm at Port Tressler, what can I trade from here?"\n\n` +
+  `**Market & Prices**\n` +
+  `- "What's the most profitable commodity?"\n` +
+  `- "Price history of Agricium"\n` +
+  `- "Compare Laranite prices in Stanton vs Pyro"\n` +
+  `- "Show me all metals"\n\n` +
+  `**Refining & Fuel**\n` +
+  `- "Where should I refine Quantainium?"\n` +
+  `- "What are the refining methods?"\n` +
+  `- "What are the cheapest fuel prices in Stanton?"\n\n` +
+  `**Ships**\n` +
+  `- "Tell me about the C2 Hercules"\n` +
+  `- "Where can I buy the Caterpillar in-game?"\n` +
+  `- "What ships can I rent?"\n` +
+  `- "Compare C2 vs Caterpillar"\n` +
+  `- "Best trades for my C2 and Caterpillar"\n\n` +
+  `**Locations**\n` +
+  `- "What space stations have a refinery?"\n` +
+  `- "Cities on Hurston"\n` +
+  `- Type @terminal-name to see what's traded there`;
+
+function handleHelp(): HandlerResult {
+  return {
+    text: `Here's what I can help you with:\n\n${HELP_TEXT}`,
+    fallbackText: `Here's what I can help you with:\n\n${HELP_TEXT}`,
+    dataContext: {
+      intent: "help",
+      dataDescription: "User asked what I can do. Displayed a list of features and example queries covering trading, market data, refining, fuel, ships, and locations.",
+    },
+  };
+}
+
 function handleUnknown(): ChatResponse {
   return {
-    text: `I'm not sure what you're asking. Here are some things I can help with:\n\n` +
-      `**Trading:**\n` +
-      `- "Where should I sell Bexalite?" - Best sell prices\n` +
-      `- "Where can I buy Laranite?" - Cheapest buy prices\n` +
-      `- "Sell Iron on Hurston" - Filter by planet\n` +
-      `- "I have 50000 aUEC" - Budget-aware trades\n` +
-      `- "I'm at Admin - HUR-L1" - Trade from your location\n\n` +
-      `**Market:**\n` +
-      `- "What's the price of Agricium?" - Price overview\n` +
-      `- "Best trade route for Quantanium" - Profitable routes\n` +
-      `- "What's the most profitable commodity?" - Rankings\n` +
-      `- "Price history of Laranite" - Price trends\n` +
-      `- "Compare Laranite prices in Stanton vs Pyro"\n` +
-      `- "Show me all metals" - Browse by category\n\n` +
-      `**Ships:**\n` +
-      `- "Tell me about the C2 Hercules" - Ship specs\n` +
-      `- "Compare C2 vs Caterpillar" - Side-by-side comparison\n` +
-      `- "Best trades for my C2 and Caterpillar" - Fleet trades\n\n` +
-      `**Locations:**\n` +
-      `- "Space stations in Stanton" - Station list\n` +
-      `- "Cities on Hurston" - City info\n` +
-      `- Type @station-name to see what's traded there`,
+    text: `I'm not sure what you're asking. Here are some things I can help with:\n\n${HELP_TEXT}`,
   };
 }
 
@@ -2361,6 +2378,8 @@ async function getHandlerResult(query: ParsedQuery): Promise<HandlerResult> {
       return handleVehicleBuy(query);
     case "vehicle_rent":
       return handleVehicleRent(query);
+    case "help":
+      return handleHelp();
     case "unknown":
     default: {
       const result = handleUnknown();
