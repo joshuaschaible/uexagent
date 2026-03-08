@@ -221,8 +221,17 @@ function resolveEntities(
 
 // --- Post-processing safety net ---
 
+function hasRentKeyword(text: string): boolean {
+  return text.includes("rent") || text.includes("rental");
+}
+
+function hasBuyKeyword(text: string): boolean {
+  return /\bbuy\b/.test(text) || text.includes("purchase") || text.includes("cost") || /\bprice\b/.test(text);
+}
+
 function postProcess(parsed: ParsedQuery): ParsedQuery {
   let { intent } = parsed;
+  const lower = parsed.raw.toLowerCase();
 
   // 2 vehicles + trade-ish intent → fleet_trade
   // But if the user wants to buy/rent the ships themselves (no commodity), keep vehicle_buy/vehicle_rent
@@ -230,11 +239,10 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
     parsed.vehicle && parsed.vehicle2 &&
     ["sell", "buy", "trade_route", "find_commodity", "unknown"].includes(intent)
   ) {
-    const lower = parsed.raw.toLowerCase();
     const hasCommodity = !!parsed.commodity;
-    if (!hasCommodity && (lower.includes("rent") || lower.includes("rental"))) {
+    if (!hasCommodity && hasRentKeyword(lower)) {
       intent = "vehicle_rent";
-    } else if (!hasCommodity && (/\bbuy\b/.test(lower) || lower.includes("purchase"))) {
+    } else if (!hasCommodity && hasBuyKeyword(lower)) {
       intent = "vehicle_buy";
     } else {
       intent = "fleet_trade";
@@ -253,10 +261,9 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
 
   // Vehicle found but unknown → check for buy/rent keywords, else vehicle_info
   if (parsed.vehicle && intent === "unknown") {
-    const lower = parsed.raw.toLowerCase();
-    if (lower.includes("rent") || lower.includes("rental")) {
+    if (hasRentKeyword(lower)) {
       intent = "vehicle_rent";
-    } else if (lower.includes("buy") || lower.includes("purchase") || lower.includes("cost") || lower.includes("price")) {
+    } else if (hasBuyKeyword(lower)) {
       intent = "vehicle_buy";
     } else {
       intent = "vehicle_info";
@@ -277,9 +284,7 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
   // the terminal's inventory, not requesting trade recommendations.
   if (parsed.terminal && !parsed.commodity && (intent === "sell" || intent === "buy" || intent === "location_trade")) {
     const mods = parsed.modifiers || [];
-    // Detect sell/buy direction from the raw query for location_trade reclassifications
     if (intent === "location_trade") {
-      const lower = parsed.raw.toLowerCase();
       if (lower.includes("sell")) { if (!mods.includes("sell")) mods.push("sell"); }
       else if (lower.includes("buy")) { if (!mods.includes("buy")) mods.push("buy"); }
     } else {

@@ -568,16 +568,17 @@ export function parseQuery(
   };
 }
 
+const COMMON_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "be", "been",
+  "in", "on", "at", "to", "for", "of", "with", "by", "from",
+  "where", "what", "how", "which", "best", "most", "can", "i",
+  "me", "my", "do", "does", "should", "would", "could",
+  "sell", "buy", "trade", "trades", "trading", "find", "get", "place", "system",
+  "ship", "ships", "about", "tell", "info", "much", "cargo",
+  "compare", "price", "prices", "vs", "show", "all", "list",
+  "have", "budget", "spend", "invest", "and", "or",
+]);
+
 function isCommonWord(word: string): boolean {
-  const common = new Set([
-    "the", "a", "an", "is", "are", "was", "were", "be", "been",
-    "in", "on", "at", "to", "for", "of", "with", "by", "from",
-    "where", "what", "how", "which", "best", "most", "can", "i",
-    "me", "my", "do", "does", "should", "would", "could",
-    "sell", "buy", "trade", "trades", "trading", "find", "get", "place", "system",
-    "ship", "ships", "about", "tell", "info", "much", "cargo",
-    "compare", "price", "prices", "vs", "show", "all", "list",
-    "have", "budget", "spend", "invest", "and", "or",
-  ]);
-  return common.has(word);
+  return COMMON_WORDS.has(word);
 }
