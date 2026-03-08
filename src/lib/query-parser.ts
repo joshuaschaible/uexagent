@@ -23,6 +23,11 @@ export type Intent =
   | "location_trade"
   | "price_compare"
   | "fleet_trade"
+  | "refinery_yields"
+  | "refinery_method"
+  | "fuel_prices"
+  | "vehicle_buy"
+  | "vehicle_rent"
   | "unknown";
 
 export type ParsedQuery = {
@@ -122,6 +127,32 @@ const PRICE_COMPARE_KEYWORDS = [
   "compare .* in .* and",
 ];
 
+const REFINERY_YIELDS_KEYWORDS = [
+  "refinery yield", "refinery bonus", "best refinery for",
+  "refinery for", "refine yield", "refining yield",
+  "yield bonus", "where to refine", "which refinery",
+  "refinery in", "refineries in",
+];
+const REFINERY_METHOD_KEYWORDS = [
+  "refining method", "refinery method", "refining methods", "refinery methods",
+  "dinyx", "electrostarolysis", "ferron exchange", "gaskin process",
+  "kazen winnowing", "pyrometric", "thermonatic", "xcr reaction", "cormack method",
+];
+const FUEL_KEYWORDS_INTENT = [
+  "fuel price", "fuel cost", "cheapest fuel", "hydrogen fuel",
+  "quantum fuel", "where to refuel", "refuel at", "fuel at",
+  "hydrogen price", "quantum price",
+];
+const VEHICLE_BUY_KEYWORDS = [
+  "buy a ship", "buy the ship", "purchase a ship", "purchase the ship",
+  "buy in-game", "buy ingame", "buy in game",
+  "auec price", "in-game price", "ingame price",
+  "ship price", "ship cost", "how much does the",
+];
+const VEHICLE_RENT_KEYWORDS = [
+  "rent a", "rent the", "rental price", "rental cost",
+  "where can i rent", "ship rental",
+];
 const MODIFIER_KEYWORDS = [
   "best", "cheapest", "highest", "lowest", "most", "top", "profitable", "both", "all",
 ];
@@ -147,6 +178,31 @@ function detectIntent(text: string): Intent {
   // Check location-based trading ("I'm at Port Tressler")
   for (const kw of LOCATION_TRADE_KEYWORDS) {
     if (lower.includes(kw)) return "location_trade";
+  }
+
+  // Check refinery methods (specific method names take priority)
+  for (const kw of REFINERY_METHOD_KEYWORDS) {
+    if (lower.includes(kw)) return "refinery_method";
+  }
+
+  // Check refinery yields
+  for (const kw of REFINERY_YIELDS_KEYWORDS) {
+    if (lower.includes(kw)) return "refinery_yields";
+  }
+
+  // Check fuel prices
+  for (const kw of FUEL_KEYWORDS_INTENT) {
+    if (lower.includes(kw)) return "fuel_prices";
+  }
+
+  // Check vehicle rent (before buy, since "rent" is more specific)
+  for (const kw of VEHICLE_RENT_KEYWORDS) {
+    if (lower.includes(kw)) return "vehicle_rent";
+  }
+
+  // Check vehicle buy (before generic vehicle_info)
+  for (const kw of VEHICLE_BUY_KEYWORDS) {
+    if (lower.includes(kw)) return "vehicle_buy";
   }
 
   // Check compare (very specific)

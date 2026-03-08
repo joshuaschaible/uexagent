@@ -3,10 +3,18 @@ import {
   getTerminals,
   getStarSystems,
   getVehicles,
+  getRefineryMethods,
+  getFuelPricesAll,
+  getPlanets,
+  getMoons,
   type Commodity,
   type Terminal,
   type StarSystem,
   type Vehicle,
+  type RefineryMethod,
+  type FuelPrice,
+  type Planet,
+  type Moon,
 } from "@/lib/uex-client";
 
 type ReferenceData = {
@@ -14,6 +22,10 @@ type ReferenceData = {
   terminals: Terminal[];
   starSystems: StarSystem[];
   vehicles: Vehicle[];
+  refineryMethods: RefineryMethod[];
+  fuelPrices: FuelPrice[];
+  planets: Planet[];
+  moons: Moon[];
   commodityMap: Map<string, Commodity>;
   terminalMap: Map<number, Terminal>;
   starSystemMap: Map<string, StarSystem>;
@@ -42,11 +54,15 @@ export async function getReferenceData(): Promise<ReferenceData> {
     return cached;
   }
 
-  const [commodities, terminals, starSystems, vehicles] = await Promise.all([
+  const [commodities, terminals, starSystems, vehicles, refineryMethods, fuelPrices, planets, moons] = await Promise.all([
     getCommodities(),
     getTerminals(),
     getStarSystems(),
     getVehicles(),
+    getRefineryMethods(),
+    getFuelPricesAll(),
+    getPlanets(),
+    getMoons(),
   ]);
 
   const commodityMap = new Map<string, Commodity>();
@@ -76,6 +92,7 @@ export async function getReferenceData(): Promise<ReferenceData> {
 
   cached = {
     commodities, terminals, starSystems, vehicles,
+    refineryMethods, fuelPrices, planets, moons,
     commodityMap, terminalMap, starSystemMap, vehicleMap,
   };
   cacheTime = Date.now();

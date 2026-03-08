@@ -53,7 +53,8 @@ const VALID_INTENTS = new Set<string>([
   "vehicle_info", "vehicle_compare", "profit_calc", "multi_hop",
   "terminal_info", "station_info", "city_info", "outpost_info",
   "location_info", "budget_trade", "location_trade", "price_compare",
-  "fleet_trade", "unknown",
+  "fleet_trade", "refinery_yields", "refinery_method", "fuel_prices",
+  "vehicle_buy", "vehicle_rent", "unknown",
 ]);
 
 // --- Build system prompt ---
@@ -113,6 +114,11 @@ Return JSON with this exact structure:
 - location_trade: User is at a location and wants trades nearby. Needs: terminal or location
 - price_compare: User wants to compare a commodity's prices across two star systems. Needs: commodity + star_system + star_system2
 - fleet_trade: User has multiple ships and wants trade recommendations for their fleet. Needs: vehicle + vehicle2
+- refinery_yields: User wants refinery yield bonuses for a commodity (where to refine). Optional: commodity, star_system
+- refinery_method: User asks about refining methods (Dinyx Solventation, Ferron Exchange, Cormack, etc.)
+- fuel_prices: User wants fuel prices (hydrogen or quantum). Optional: star_system, planet
+- vehicle_buy: User wants to buy a ship in-game with aUEC (not pledge store). Needs: vehicle
+- vehicle_rent: User wants to rent a ship in-game. Needs: vehicle
 - unknown: Cannot determine intent.
 
 ## Important rules
@@ -121,6 +127,10 @@ Return JSON with this exact structure:
 - If user mentions a ship by manufacturer + model, extract only the FULL ship name as vehicle
 - For budget queries, extract the numeric amount in aUEC (convert "50k" to 50000)
 - If the user mentions multiple commodities (e.g. "sell Slam and Neon"), return commodity as an array: ["Slam", "Neon"]
+- **Follow-ups**: If a previous user message is shown, the current message may be a follow-up. When the current message is vague/short and doesn't mention specific entities, ALWAYS inherit entities from the previous message. Do NOT invent or guess new entities. Examples:
+  - Previous: "Where can I sell Iron (Ore)?" + Current: "What gives me the best price?" → intent: sell, commodity: "Iron (Ore)"
+  - Previous: "Where can I sell Laranite?" + Current: "What about in Pyro?" → intent: sell, commodity: "Laranite", star_system: "Pyro"
+  - Previous: "Best trade route for Gold" + Current: "How about with a Caterpillar?" → intent: trade_route, commodity: "Gold", vehicle: "Caterpillar"
 
 ## Categories
 Metal, Mineral, Agricultural, Gas, Drug, Scrap, Vice, Medical
@@ -215,11 +225,20 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
   let { intent } = parsed;
 
   // 2 vehicles + trade-ish intent → fleet_trade
+  // But if the user wants to buy/rent the ships themselves (no commodity), keep vehicle_buy/vehicle_rent
   if (
     parsed.vehicle && parsed.vehicle2 &&
     ["sell", "buy", "trade_route", "find_commodity", "unknown"].includes(intent)
   ) {
-    intent = "fleet_trade";
+    const lower = parsed.raw.toLowerCase();
+    const hasCommodity = !!parsed.commodity;
+    if (!hasCommodity && (lower.includes("rent") || lower.includes("rental"))) {
+      intent = "vehicle_rent";
+    } else if (!hasCommodity && (/\bbuy\b/.test(lower) || lower.includes("purchase"))) {
+      intent = "vehicle_buy";
+    } else {
+      intent = "fleet_trade";
+    }
   }
 
   // Commodity found but unknown → find_commodity
@@ -232,9 +251,16 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
     intent = parsed.vehicle ? "vehicle_info" : "unknown";
   }
 
-  // Vehicle found but unknown → vehicle_info
+  // Vehicle found but unknown → check for buy/rent keywords, else vehicle_info
   if (parsed.vehicle && intent === "unknown") {
-    intent = "vehicle_info";
+    const lower = parsed.raw.toLowerCase();
+    if (lower.includes("rent") || lower.includes("rental")) {
+      intent = "vehicle_rent";
+    } else if (lower.includes("buy") || lower.includes("purchase") || lower.includes("cost") || lower.includes("price")) {
+      intent = "vehicle_buy";
+    } else {
+      intent = "vehicle_info";
+    }
   }
 
   // Terminal found but unknown/location_info → terminal_info
@@ -285,7 +311,8 @@ export function isLLMClassifierAvailable(): boolean {
 
 export async function classifyWithLLM(
   message: string,
-  referenceData: ReferenceData
+  referenceData: ReferenceData,
+  previousUserMessage?: string
 ): Promise<ParsedQuery | null> {
   if (!isLLMClassifierAvailable()) return null;
 
@@ -298,13 +325,22 @@ export async function classifyWithLLM(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
+    // Build messages — include previous user message as context for follow-ups
+    const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
+      { role: "system", content: systemPrompt },
+    ];
+    if (previousUserMessage) {
+      messages.push(
+        { role: "user", content: previousUserMessage },
+        { role: "assistant", content: "(previous query handled)" },
+      );
+    }
+    messages.push({ role: "user", content: message });
+
     const completion = await client.chat.completions.create(
       {
         model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: message },
-        ],
+        messages,
         response_format: { type: "json_object" },
         temperature: 0.1,
         max_tokens: 300,

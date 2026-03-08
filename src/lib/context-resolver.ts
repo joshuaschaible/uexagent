@@ -17,6 +17,7 @@ export function resolveContext(
   // Check if current query looks like a follow-up
   const lower = current.raw.toLowerCase();
   const followUpPatterns = [
+    // Explicit follow-up phrases
     "what about",
     "how about",
     "and in",
@@ -24,6 +25,13 @@ export function resolveContext(
     "what if",
     "same for",
     "same but",
+    "that one",
+    "that commodity",
+    "that ship",
+    "those",
+    "there",
+    "instead",
+    // Location-only follow-ups
     "in pyro",
     "in stanton",
     "on hurston",
@@ -42,29 +50,74 @@ export function resolveContext(
     "on calliope",
     "on clio",
     "on euterpe",
-    "that one",
-    "that commodity",
-    "that ship",
-    "those",
-    "there",
-    "instead",
+    // Pronoun references
+    "sell it",
+    "buy it",
+    "trade it",
+    "about it",
+    "for it",
+    "with it",
+    "sell them",
+    "buy them",
+    // Comparative / superlative follow-ups (no entity = referring to previous)
+    "best price",
+    "best place",
+    "highest price",
+    "lowest price",
+    "cheapest",
+    "most expensive",
+    "most profit",
+    "best route",
+    "which one",
+    "where else",
+    "anywhere else",
+    "any other",
   ];
 
   // Don't inherit context when the query is about a specific terminal or location
   const isTerminalOrLocationQuery = current.terminal &&
     ["terminal_info", "location_trade"].includes(current.intent);
 
+  // Check if entities in the parsed query are actually mentioned in the raw message.
+  // LLM classifiers can hallucinate entities from conversation context — strip those
+  // so the context resolver properly inherits from history instead.
+  const rawHasCommodity = current.commodity
+    ? lower.includes(current.commodity.name.toLowerCase()) ||
+      lower.includes(current.commodity.code.toLowerCase())
+    : false;
+  const rawHasVehicle = current.vehicle
+    ? lower.includes(current.vehicle.name.toLowerCase()) ||
+      (current.vehicle.name_full ? lower.includes(current.vehicle.name_full.toLowerCase()) : false)
+    : false;
+
+  // If the LLM hallucinated an entity not in the raw message, clear it
+  if (current.commodity && !rawHasCommodity) {
+    current = { ...current, commodity: undefined, commodities: undefined };
+  }
+  if (current.vehicle && !rawHasVehicle) {
+    current = { ...current, vehicle: undefined };
+  }
+
+  // A query is a follow-up if:
+  // 1. It matches a known follow-up pattern, OR
+  // 2. It has a recognized intent but no commodity or vehicle (e.g. "sell" with no commodity), OR
+  // 3. It has NO recognized entities at all — likely a vague reference to previous context
+  const hasNoEntities = !current.commodity && !current.vehicle && !current.terminal
+    && !current.starSystem && !current.planet && !current.moon;
+
   const isFollowUp =
     !isTerminalOrLocationQuery && (
       followUpPatterns.some((p) => lower.includes(p)) ||
-      (current.intent !== "unknown" && !current.commodity && !current.vehicle)
+      (current.intent !== "unknown" && !current.commodity && !current.vehicle) ||
+      (current.intent === "unknown" && hasNoEntities)
     );
 
   if (!isFollowUp) return current;
 
   // Find the most recent user message with entities
+  // Exclude the current message — some clients include it in history
   const previousUserMessages = history
-    .filter((m) => m.role === "user")
+    .filter((m) => m.role === "user" && m.text !== current.raw)
     .reverse();
 
   let inheritedCommodities: Commodity[] | undefined;
@@ -98,6 +151,27 @@ export function resolveContext(
 
   const commodities = current.commodities || inheritedCommodities;
 
+  // Determine the best intent:
+  // - If current intent is "unknown", use inherited intent
+  // - If we're inheriting a commodity but the current intent doesn't use one
+  //   (e.g. "commodity_ranking"), the inherited intent is more relevant
+  const COMMODITY_INTENTS = new Set([
+    "sell", "buy", "trade_route", "price_check", "price_history",
+    "find_commodity", "profit_calc", "price_compare",
+    "refinery_yields",
+  ]);
+  let resolvedIntent = current.intent;
+  if (current.intent === "unknown") {
+    resolvedIntent = inheritedIntent;
+  } else if (
+    hasNoEntities && inheritedCommodities &&
+    !COMMODITY_INTENTS.has(current.intent) && COMMODITY_INTENTS.has(inheritedIntent)
+  ) {
+    // Follow-up has no entities and a generic intent (e.g. commodity_ranking),
+    // but previous message had a specific commodity intent — keep the previous intent
+    resolvedIntent = inheritedIntent;
+  }
+
   return {
     ...current,
     commodity: current.commodity || (commodities ? commodities[0] : undefined),
@@ -105,6 +179,6 @@ export function resolveContext(
     starSystem: current.starSystem || inheritedSystem,
     vehicle: current.vehicle || inheritedVehicle,
     moon: current.moon || inheritedMoon,
-    intent: current.intent === "unknown" ? inheritedIntent : current.intent,
+    intent: resolvedIntent,
   };
 }

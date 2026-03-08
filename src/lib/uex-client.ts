@@ -81,12 +81,16 @@ export type CommodityPrice = {
   price_buy_avg: number;
   price_sell: number;
   price_sell_avg: number;
-  scu_buy: number;
-  scu_buy_avg: number;
-  scu_sell_stock: number;
-  scu_sell_stock_avg: number;
-  status_buy: number;
-  status_sell: number;
+  /** Missing from commodities_raw_prices endpoint */
+  scu_buy?: number;
+  scu_buy_avg?: number;
+  /** Missing from commodities_raw_prices endpoint */
+  scu_sell_stock?: number;
+  scu_sell_stock_avg?: number;
+  /** Missing from commodities_raw_prices endpoint — treat undefined as valid */
+  status_buy?: number;
+  /** Missing from commodities_raw_prices endpoint — treat undefined as valid */
+  status_sell?: number;
   commodity_name: string;
   commodity_code: string;
   terminal_name: string;
@@ -482,4 +486,189 @@ export async function getItemPrices(
   params: Partial<{ id_item: number; id_terminal: number; id_category: number }>
 ): Promise<ItemPrice[]> {
   return uexFetch<ItemPrice>("items_prices", params as Record<string, string | number>);
+}
+
+// --- Refinery types & functions ---
+
+export type RefineryYield = {
+  id: number;
+  id_commodity: number;
+  id_terminal: number;
+  value: number;
+  value_week: number;
+  value_month: number;
+  commodity_name: string;
+  terminal_name: string;
+  star_system_name: string;
+  planet_name: string | null;
+  orbit_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+};
+
+export type RefineryMethod = {
+  id: number;
+  name: string;
+  code: string;
+  rating_yield: number;
+  rating_cost: number;
+  rating_speed: number;
+};
+
+export type RefineryCapacity = {
+  id: number;
+  id_terminal: number;
+  value: number;
+  value_week: number;
+  value_month: number;
+  terminal_name: string;
+  star_system_name: string;
+  planet_name: string | null;
+  orbit_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+};
+
+export async function getRefineryYields(): Promise<RefineryYield[]> {
+  return uexFetch<RefineryYield>("refineries_yields");
+}
+
+export async function getRefineryMethods(): Promise<RefineryMethod[]> {
+  return uexFetch<RefineryMethod>("refineries_methods");
+}
+
+export async function getRefineryCapacities(): Promise<RefineryCapacity[]> {
+  return uexFetch<RefineryCapacity>("refineries_capacities");
+}
+
+// --- Fuel types & functions ---
+
+export type FuelPrice = {
+  id: number;
+  id_commodity: number;
+  id_terminal: number;
+  price_buy: number;
+  price_buy_avg: number;
+  commodity_name: string;
+  terminal_name: string;
+  star_system_name: string;
+  planet_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+  city_name: string | null;
+  outpost_name: string | null;
+};
+
+export async function getFuelPricesAll(): Promise<FuelPrice[]> {
+  return uexFetch<FuelPrice>("fuel_prices_all");
+}
+
+// --- Vehicle purchase & rental types & functions ---
+
+export type VehiclePurchasePrice = {
+  id: number;
+  id_vehicle: number;
+  id_terminal: number;
+  price_buy: number;
+  price_buy_avg: number;
+  terminal_name: string;
+  terminal_code: string;
+  star_system_name: string;
+  planet_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+  city_name: string | null;
+  outpost_name: string | null;
+};
+
+export type VehicleRentalPrice = {
+  id: number;
+  id_vehicle: number;
+  id_terminal: number;
+  price_rent: number;
+  price_rent_avg: number;
+  terminal_name: string;
+  terminal_code: string;
+  star_system_name: string;
+  planet_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+  city_name: string | null;
+  outpost_name: string | null;
+};
+
+export async function getVehiclePurchasePrices(params: {
+  id_vehicle: number;
+}): Promise<VehiclePurchasePrice[]> {
+  return uexFetch<VehiclePurchasePrice>(
+    "vehicles_purchases_prices",
+    params as Record<string, string | number>
+  );
+}
+
+export type VehiclePurchasePriceSummary = {
+  id: number;
+  id_vehicle: number;
+  id_terminal: number;
+  price_buy: number;
+  vehicle_name: string;
+  terminal_name: string;
+};
+
+export async function getVehiclePurchasePricesAll(): Promise<VehiclePurchasePriceSummary[]> {
+  return uexFetch<VehiclePurchasePriceSummary>("vehicles_purchases_prices_all");
+}
+
+export async function getVehicleRentalPrices(params: {
+  id_vehicle: number;
+}): Promise<VehicleRentalPrice[]> {
+  return uexFetch<VehicleRentalPrice>(
+    "vehicles_rentals_prices",
+    params as Record<string, string | number>
+  );
+}
+
+export type VehicleRentalPriceSummary = {
+  id: number;
+  id_vehicle: number;
+  id_terminal: number;
+  price_rent: number;
+  vehicle_name: string;
+  terminal_name: string;
+};
+
+export async function getVehicleRentalPricesAll(): Promise<VehicleRentalPriceSummary[]> {
+  return uexFetch<VehicleRentalPriceSummary>("vehicles_rentals_prices_all");
+}
+
+// --- Planet & Moon types & functions ---
+
+export type Planet = {
+  id: number;
+  id_star_system: number;
+  name: string;
+  code: string;
+  is_available: number;
+  star_system_name: string;
+  faction_name: string | null;
+};
+
+export type Moon = {
+  id: number;
+  id_star_system: number;
+  id_planet: number;
+  name: string;
+  code: string;
+  is_available: number;
+  planet_name: string | null;
+  star_system_name: string;
+  faction_name: string | null;
+};
+
+export async function getPlanets(): Promise<Planet[]> {
+  return uexFetch<Planet>("planets");
+}
+
+export async function getMoons(): Promise<Moon[]> {
+  return uexFetch<Moon>("moons");
 }

@@ -1,6 +1,6 @@
-# Star Citizen Trade Bot — Features & Chat Examples
+# UEX Agent — Features & Chat Examples
 
-A real-time commodity trading assistant for Star Citizen, powered by UEX Corp API data.
+A real-time commodity trading assistant for Star Citizen, powered by UEX Corp API data and LLM-native response generation.
 
 ---
 
@@ -124,6 +124,14 @@ Calculate exactly how much you'll make on a trade run.
 
 ## Ship Features
 
+### My Fleet
+Save ships to your personal fleet and select an active ship to automatically inform all trade answers.
+
+- **Fleet management** — Open from the sidebar's "My Fleet" button. Search for any ship by name and add it to your fleet with one click. Ships persist across sessions via localStorage.
+- **Active ship selector** — A ship selector in the chat input toolbar lets you pick which ship you're currently flying. Shows as a compact pill (e.g., "Caterpillar · 576 SCU") when selected.
+- **Context-aware answers** — When an active ship is set, all trade route, profit calculator, budget, and multi-hop answers automatically use your ship's cargo capacity instead of the default 96 SCU. No need to mention your ship in every question.
+- **Explicit overrides** — Mentioning a ship by name (e.g., `@C2 Hercules`) always overrides the active ship for that query.
+
 ### Ship Info
 Look up detailed specs for any ship or vehicle.
 
@@ -153,29 +161,40 @@ Learn about star systems.
 | `Tell me about Stanton` | System overview with planets and locations |
 | `Tell me about Crusader` | Planet/location information |
 
-### Stations
-Find space stations in a system.
+### Space Stations
+Find space stations in a system, with optional feature filtering.
 
 | Example Query | What It Does |
 |---|---|
-| `Space stations in Stanton` | All stations with location info |
+| `Space stations in Stanton` | All stations with services (trade, refuel, repair, refinery, clinic) |
 | `Stations in Pyro` | Space station list for a system |
+| `What stations have refineries in Pyro?` | Filtered to only stations with refineries |
+| `Stations with repair in Stanton` | Filtered to stations with repair services |
+
+### Terminal Info
+Look up details and live prices for a specific trade terminal.
+
+| Example Query | What It Does |
+|---|---|
+| `Tell me about CRU-L1` | Terminal location, type, and commodity prices |
+| `What's available at Lorville CBD?` | Buy/sell prices at a specific terminal |
 
 ### Cities
 Find cities on a planet.
 
 | Example Query | What It Does |
 |---|---|
-| `Cities on Hurston` | List of cities with details |
+| `Cities on Hurston` | List of cities with trade terminals, cargo centers, refineries |
 | `What cities are on ArcCorp?` | City information |
 
 ### Outposts
-Find outposts on a planet.
+Find outposts on a planet or moon, with optional feature filtering.
 
 | Example Query | What It Does |
 |---|---|
-| `Outposts on Hurston` | All outposts with types |
-| `Mining outposts on MicroTech` | Outpost listings |
+| `Outposts on Hurston` | All outposts with services |
+| `Mining outposts on MicroTech` | Outposts filtered by mining/refinery capability |
+| `Outposts with clinics on Aberdeen` | Filtered to outposts with medical clinics |
 
 ---
 
@@ -183,13 +202,15 @@ Find outposts on a planet.
 
 ### Chat Experience
 - **Streaming responses** — Text appears word by word with cursor animation
-- **Conversation memory** — Follow-up questions understand context (e.g. "What about in Pyro?" after asking about a commodity)
+- **LLM-native responses** — GPT-4o-mini generates natural, conversational answers from structured data (with template fallback)
+- **Conversation memory** — Follow-up questions understand context (e.g., "What about in Pyro?" after asking about a commodity)
 - **@ mentions with typeahead** — Type `@` to search commodities, ships, locations, and terminals inline
 - **Keyboard shortcuts** — `Enter` to send, `Shift+Enter` for newline, `↑` to recall previous message
 
 ### Data Display
 - **Sortable tables** — Click any column header to sort ascending/descending (numeric-aware sorting)
 - **CSV export** — Download any table as a CSV file for spreadsheet use
+- **UEX links** — Commodity and terminal names in tables link directly to their UEX Corp pages
 - **Price charts** — Interactive line charts for price history (Recharts)
 - **System maps** — SVG trade route visualizations
 - **Profit cards** — Visual profit calculator display
@@ -201,13 +222,19 @@ Find outposts on a planet.
 - **Copy responses** — Hover to copy bot responses (tables as TSV for spreadsheet paste)
 - **Retry on error** — Retry failed messages with one click
 
+### Fleet & Ship Management
+- **Fleet settings drawer** — Add/remove ships with real-time search from the full UEX vehicle database
+- **Active ship selector** — Compact popover in the input toolbar to pick your current ship
+- **Persistent fleet** — Ships and active selection saved to localStorage across sessions
+
 ### Data & UX
 - **Data freshness indicator** — Shows when data was last refreshed + manual refresh button
 - **Categorized example prompts** — Welcome screen with Trading, Market Data, and Ships & Locations sections
 - **Loading skeleton** — Smooth pulse animation while waiting for responses
 - **Dark/light mode** — System-aware theme toggle
 - **Mobile responsive** — Full mobile support with slide-out sidebar
-- **LLM fallback** — When the keyword parser can't understand a query, GPT-4o interprets it (requires OpenAI API key)
+- **Smart error handling** — UEX API outages show friendly messages with retry guidance
+- **LLM classifier** — When the keyword parser can't understand a query, GPT-4o-mini interprets it (with circuit breaker for reliability)
 
 ---
 
@@ -215,24 +242,56 @@ Find outposts on a planet.
 
 ### Stack
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS v4
+- **UI Components**: base-ui (Button, Popover, Sheet, Tooltip, etc.)
 - **Data**: UEX Corp API v2.0 (real-time Star Citizen commodity data)
 - **Charts**: Recharts
-- **LLM**: OpenAI GPT-4o (optional fallback)
-- **Persistence**: localStorage
+- **LLM**: OpenAI GPT-4o-mini — dual use: intent classification and natural response generation
+- **Persistence**: localStorage (conversations, fleet, active ship, theme)
 
 ### API Endpoints
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/chat/stream` | POST | SSE streaming chat endpoint |
-| `/api/suggest` | GET | Typeahead suggestions |
+| `/api/chat/stream` | POST | SSE streaming chat with active ship injection |
+| `/api/suggest` | GET | Typeahead suggestions for @-mentions |
+| `/api/vehicle` | GET | Vehicle lookup by name (returns fleet-ready data) |
 | `/api/cache-status` | GET | Cache age info |
 | `/api/cache-status` | DELETE | Clear data cache |
 
-### Query Parser
-The bot uses a keyword-based NLP parser with:
-- 17 intent types (sell, buy, trade_route, price_check, price_history, commodity_ranking, find_commodity, commodity_category, vehicle_info, vehicle_compare, station_info, city_info, outpost_info, location_info, budget_trade, location_trade, price_compare, fleet_trade, profit_calc, multi_hop)
-- Sliding window entity extraction (4-word to 1-word) for fuzzy commodity/ship/location matching
-- Context resolution from conversation history
-- Planet and system filtering
-- Budget extraction from natural language
-- Automatic fleet detection when 2+ ships are mentioned
+### Query Processing Pipeline
+```
+User message
+  → LLM classifier (GPT-4o-mini, with circuit breaker)
+  → Keyword parser fallback (17 intent types)
+  → Context resolver (conversation history)
+  → Active ship injection (fleet selection)
+  → Answer builder (data fetch + handler)
+  → Response generator (LLM-native text + fallback)
+  → SSE stream (word-by-word with 15ms delay)
+```
+
+### Intent Types
+The bot handles 19 distinct intents:
+
+| Intent | Example |
+|---|---|
+| `sell` | "Where to sell Laranite?" |
+| `buy` | "Where to buy Quantanium?" |
+| `trade_route` | "Best trade route for Gold" |
+| `price_check` | "Price of Agricium" |
+| `price_history` | "Laranite price trends" |
+| `commodity_ranking` | "Most profitable commodity" |
+| `find_commodity` | "Tell me about Bexalite" |
+| `commodity_category` | "Show me all metals" |
+| `vehicle_info` | "C2 Hercules specs" |
+| `vehicle_compare` | "Compare C2 vs Caterpillar" |
+| `terminal_info` | "Tell me about CRU-L1" |
+| `station_info` | "Space stations in Stanton" |
+| `city_info` | "Cities on Hurston" |
+| `outpost_info` | "Outposts on Aberdeen" |
+| `location_info` | "Tell me about Stanton" |
+| `budget_trade` | "50k budget, best trades" |
+| `location_trade` | "What to trade at Lorville?" |
+| `price_compare` | "Compare Gold in Stanton vs Pyro" |
+| `fleet_trade` | "Trades for C2 and Caterpillar" |
+| `profit_calc` | "Profit trading Laranite with C2?" |
+| `multi_hop` | "Multi-hop route with 96 SCU" |

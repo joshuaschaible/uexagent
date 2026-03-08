@@ -32,8 +32,15 @@ export async function POST(request: Request) {
         let usedLLM = false;
 
         // Try LLM classifier first (fast, handles natural language)
+        // Pass last user message as context for follow-up detection
         if (isLLMClassifierAvailable()) {
-          const llmParsed = await classifyWithLLM(message, referenceData);
+          const previousUserMessages = (history || [])
+            .filter((m: { role: string }) => m.role === "user");
+          const lastUserMessage = previousUserMessages.length > 0
+            ? previousUserMessages[previousUserMessages.length - 1].text
+            : undefined;
+
+          const llmParsed = await classifyWithLLM(message, referenceData, lastUserMessage);
           if (llmParsed && llmParsed.intent !== "unknown") {
             parsed = llmParsed;
             usedLLM = true;
