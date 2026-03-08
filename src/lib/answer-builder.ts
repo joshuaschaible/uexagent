@@ -80,7 +80,7 @@ function formatStock(scu: number | undefined, fallback = "Unknown"): string {
 
 /** Get display name for a vehicle (prefer full name) */
 function vehicleDisplayName(v: Vehicle): string {
-  return vehicleDisplayName(v);
+  return v.name_full || v.name;
 }
 
 /** Build a human-readable location label from query context */
