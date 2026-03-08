@@ -175,6 +175,10 @@ export async function getCommodities(): Promise<Commodity[]> {
   return uexFetch<Commodity>("commodities");
 }
 
+export async function getCommodityPricesAll(): Promise<CommodityPrice[]> {
+  return uexFetch<CommodityPrice>("commodities_prices_all");
+}
+
 export async function getTerminals(
   filters?: Partial<{ id_star_system: number; id_planet: number; type: string }>
 ): Promise<Terminal[]> {
@@ -214,4 +218,268 @@ export async function getCommodityRoutes(
     "commodities_routes",
     params as Record<string, string | number>
   );
+}
+
+// --- New types ---
+
+export type CommodityRanking = {
+  id: number;
+  code: string;
+  slug: string;
+  name: string;
+  is_temporary: number;
+  price_buy_avg_month: number;
+  price_sell_avg_month: number;
+  price_buy_minimum: number;
+  price_sell_maximum: number;
+  scu_buy_avg_month: number;
+  scu_sell_avg_month: number;
+  volatility_price_buy: number;
+  volatility_price_sell: number;
+  cax_score: number;
+  investment: number;
+  investment_per_scu: number;
+  profitability: number;
+  profitability_relative_percentage: number;
+  profitability_per_scu: number;
+  availability_buy: number | null;
+  availability_sell: number | null;
+  terminal_id_price_buy_minimum: number;
+  terminal_slug_price_buy_minimum: string;
+  terminal_id_price_sell_maximum: number;
+  terminal_slug_price_sell_maximum: string;
+};
+
+export type CommodityPriceHistory = {
+  id: number;
+  id_commodity: number;
+  id_terminal: number;
+  price_buy: number;
+  price_sell: number;
+  scu_buy: number;
+  scu_sell_stock: number;
+  scu_sell: number;
+  status_buy: number | null;
+  status_sell: number | null;
+  game_version: string;
+  date_added: number;
+  commodity_name: string;
+  terminal_name: string;
+  star_system_name: string;
+  planet_name: string | null;
+};
+
+export type Vehicle = {
+  id: number;
+  id_company: number;
+  name: string;
+  name_full: string;
+  slug: string;
+  scu: number;
+  mass: number;
+  width: number;
+  height: number;
+  length: number;
+  crew: number;
+  fuel_quantum: number;
+  fuel_hydrogen: number;
+  container_sizes: string;
+  pad_type: string;
+  is_spaceship: number;
+  is_ground_vehicle: number;
+  is_cargo: number;
+  is_mining: number;
+  is_salvage: number;
+  is_medical: number;
+  is_combat: number;
+  is_exploration: number;
+  is_racing: number;
+  is_refuel: number;
+  is_repair: number;
+  is_stealth: number;
+  is_quantum_capable: number;
+  company_name: string;
+  game_version: string;
+};
+
+export type SpaceStation = {
+  id: number;
+  id_star_system: number;
+  id_planet: number;
+  id_orbit: number;
+  name: string;
+  nickname: string;
+  star_system_name: string;
+  planet_name: string | null;
+  orbit_name: string | null;
+  faction_name: string | null;
+  is_available: number;
+  is_monitored: number;
+  is_armistice: number;
+  has_trade_terminal: number;
+  has_habitation: number;
+  has_refinery: number;
+  has_cargo_center: number;
+  has_clinic: number;
+  has_food: number;
+  has_shops: number;
+  has_refuel: number;
+  has_repair: number;
+  has_loading_dock: number;
+  has_docking_port: number;
+  has_freight_elevator: number;
+  pad_types: string;
+};
+
+export type City = {
+  id: number;
+  id_star_system: number;
+  id_planet: number;
+  name: string;
+  star_system_name: string;
+  planet_name: string | null;
+  faction_name: string | null;
+  is_available: number;
+  is_armistice: number;
+  has_trade_terminal: number;
+  has_habitation: number;
+  has_refinery: number;
+  has_cargo_center: number;
+  has_clinic: number;
+  has_food: number;
+  has_shops: number;
+  has_refuel: number;
+  has_repair: number;
+  has_loading_dock: number;
+  has_docking_port: number;
+  has_freight_elevator: number;
+  pad_types: string;
+};
+
+export type Outpost = {
+  id: number;
+  id_star_system: number;
+  id_planet: number;
+  id_moon: number;
+  name: string;
+  nickname: string;
+  star_system_name: string;
+  planet_name: string | null;
+  moon_name: string | null;
+  faction_name: string | null;
+  is_available: number;
+  has_trade_terminal: number;
+  has_refinery: number;
+  has_cargo_center: number;
+  has_clinic: number;
+  has_food: number;
+  has_refuel: number;
+  has_repair: number;
+  has_loading_dock: number;
+  has_freight_elevator: number;
+  pad_types: string;
+};
+
+export type ItemPrice = {
+  id: number;
+  id_item: number;
+  id_terminal: number;
+  id_star_system: number;
+  id_planet: number;
+  price_buy: number;
+  price_buy_avg: number;
+  price_sell: number;
+  price_sell_avg: number;
+  item_name: string;
+  terminal_name: string;
+  star_system_name: string;
+  planet_name: string | null;
+  date_modified: number;
+};
+
+export type CommodityAverage = {
+  id: number;
+  id_commodity: number;
+  commodity_name: string;
+  commodity_code: string;
+  price_buy: number;
+  price_buy_min: number;
+  price_buy_max: number;
+  price_buy_avg: number;
+  price_sell: number;
+  price_sell_min: number;
+  price_sell_max: number;
+  price_sell_avg: number;
+  scu_buy: number;
+  scu_buy_avg: number;
+  scu_sell: number;
+  scu_sell_avg: number;
+  volatility_price_buy: number;
+  volatility_price_sell: number;
+  cax_score: number;
+  game_version: string;
+};
+
+// --- New API functions ---
+
+export async function getCommodityRanking(): Promise<CommodityRanking[]> {
+  return uexFetch<CommodityRanking>("commodities_ranking");
+}
+
+export async function getCommodityPriceHistory(params: {
+  id_terminal: number;
+  id_commodity: number;
+}): Promise<CommodityPriceHistory[]> {
+  return uexFetch<CommodityPriceHistory>(
+    "commodities_prices_history",
+    params as Record<string, string | number>
+  );
+}
+
+export async function getCommodityAverages(params: {
+  id_commodity: number;
+}): Promise<CommodityAverage[]> {
+  return uexFetch<CommodityAverage>(
+    "commodities_averages",
+    params as Record<string, string | number>
+  );
+}
+
+export async function getCommodityRawPrices(params: {
+  id_commodity: number;
+}): Promise<CommodityPrice[]> {
+  return uexFetch<CommodityPrice>(
+    "commodities_raw_prices",
+    params as Record<string, string | number>
+  );
+}
+
+export async function getVehicles(
+  filters?: Partial<{ id_company: number }>
+): Promise<Vehicle[]> {
+  return uexFetch<Vehicle>("vehicles", filters as Record<string, string | number>);
+}
+
+export async function getSpaceStations(
+  filters?: Partial<{ id_star_system: number; id_planet: number }>
+): Promise<SpaceStation[]> {
+  return uexFetch<SpaceStation>("space_stations", filters as Record<string, string | number>);
+}
+
+export async function getCities(
+  filters?: Partial<{ id_star_system: number; id_planet: number }>
+): Promise<City[]> {
+  return uexFetch<City>("cities", filters as Record<string, string | number>);
+}
+
+export async function getOutposts(
+  filters?: Partial<{ id_star_system: number; id_planet: number; id_moon: number }>
+): Promise<Outpost[]> {
+  return uexFetch<Outpost>("outposts", filters as Record<string, string | number>);
+}
+
+export async function getItemPrices(
+  params: Partial<{ id_item: number; id_terminal: number; id_category: number }>
+): Promise<ItemPrice[]> {
+  return uexFetch<ItemPrice>("items_prices", params as Record<string, string | number>);
 }
