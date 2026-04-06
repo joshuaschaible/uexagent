@@ -246,6 +246,7 @@ export function ChatInterface() {
       let streamedChart: Message["chart"] | undefined;
       let streamedMap: Message["map"] | undefined;
       let streamedProfit: Message["profit"] | undefined;
+      let streamedImage: Message["image"] | undefined;
       let isLLM = false;
       let isError = false;
       let buffer = "";
@@ -281,6 +282,8 @@ export function ChatInterface() {
               streamedMap = data.content;
             } else if (data.type === "profit") {
               streamedProfit = data.content;
+            } else if (data.type === "image") {
+              streamedImage = data.content;
             } else if (data.type === "tables") {
               streamedTables = data.content;
             } else if (data.type === "meta") {
@@ -317,6 +320,7 @@ export function ChatInterface() {
             tables: streamedTables,
             chart: streamedChart,
             map: streamedMap,
+            image: streamedImage,
             profit: streamedProfit,
             isLLM,
             isError,
@@ -579,6 +583,7 @@ export function ChatInterface() {
                 tables={msg.tables}
                 chart={msg.chart}
                 map={msg.map}
+                image={msg.image}
                 profit={msg.profit}
                 isError={msg.isError}
                 isLLM={msg.isLLM}

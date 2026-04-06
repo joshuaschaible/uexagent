@@ -105,6 +105,12 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(chunk));
         }
 
+        // Send image as single chunk
+        if (response.image) {
+          const chunk = `data: ${JSON.stringify({ type: "image", content: response.image })}\n\n`;
+          controller.enqueue(encoder.encode(chunk));
+        }
+
         // Send tables as single chunk
         if (response.tables) {
           const chunk = `data: ${JSON.stringify({ type: "tables", content: response.tables })}\n\n`;

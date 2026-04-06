@@ -25,6 +25,11 @@ type ChatMessageProps = {
     routes: { from: string; to: string; profit: number; commodity: string }[];
     highlights: string[];
   };
+  image?: {
+    url: string;
+    alt: string;
+    caption?: string;
+  };
   profit?: ProfitData;
   tables?: NamedTable[];
   isError?: boolean;
@@ -144,6 +149,7 @@ export function ChatMessage({
   table,
   chart,
   map,
+  image,
   profit,
   tables,
   isError,
@@ -215,6 +221,24 @@ export function ChatMessage({
             <span className="inline-block w-1.5 h-4 bg-foreground/70 animate-pulse ml-0.5 align-text-bottom" />
           )}
         </div>
+
+        {/* Ship/Location Image */}
+        {image && (
+          <div className="mt-3 rounded-lg overflow-hidden border border-border max-w-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image.url}
+              alt={image.alt}
+              className="w-full h-auto object-cover"
+              loading="lazy"
+            />
+            {image.caption && (
+              <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30">
+                {image.caption}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Price Chart */}
         {chart && (

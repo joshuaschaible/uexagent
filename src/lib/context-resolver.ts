@@ -105,8 +105,11 @@ export function resolveContext(
   const hasNoEntities = !current.commodity && !current.vehicle && !current.terminal
     && !current.starSystem && !current.planet && !current.moon;
 
+  // vehicle_rent / vehicle_buy without a vehicle is valid (list all ships), not a follow-up
+  const isSelfSufficientIntent = ["vehicle_rent", "vehicle_buy"].includes(current.intent) && !current.vehicle;
+
   const isFollowUp =
-    !isTerminalOrLocationQuery && (
+    !isTerminalOrLocationQuery && !isSelfSufficientIntent && (
       followUpPatterns.some((p) => lower.includes(p)) ||
       (current.intent !== "unknown" && !current.commodity && !current.vehicle) ||
       (current.intent === "unknown" && hasNoEntities)

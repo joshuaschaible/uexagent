@@ -18,9 +18,18 @@ import {
   type CommodityPrice,
   type Vehicle,
 } from "@/lib/uex-client";
-import { getReferenceData } from "@/lib/data/cache";
+import { getReferenceData, findMoon, findPlanet, findStarSystem } from "@/lib/data/cache";
 import { planMultiHopRoute } from "@/lib/route-planner";
 import { generateResponseText, type DataContext } from "@/lib/response-generator";
+import {
+  getShipWikiData,
+  getManufacturerWikiData,
+  getShipHardpoints,
+  getSystemWikiData,
+  getPlanetWikiData,
+  getJumpPoints,
+  truncateLore,
+} from "@/lib/wiki-client";
 
 type HandlerResult = ChatResponse & {
   dataContext?: DataContext;
@@ -899,6 +908,23 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   }
 
   const v = query.vehicle;
+
+  // Fetch UEX prices + wiki data in parallel for speed
+  const [purchaseResult, rentalResult, wikiResult, hardpointResult, manufacturerResult] =
+    await Promise.allSettled([
+      getVehiclePurchasePrices({ id_vehicle: v.id }),
+      getVehicleRentalPrices({ id_vehicle: v.id }),
+      getShipWikiData(v.name_full || v.name),
+      getShipHardpoints(v.name_full || v.name),
+      getManufacturerWikiData(v.company_name),
+    ]);
+
+  const purchases = purchaseResult.status === "fulfilled" ? purchaseResult.value : [];
+  const rentals = rentalResult.status === "fulfilled" ? rentalResult.value : [];
+  const wiki = wikiResult.status === "fulfilled" ? wikiResult.value : null;
+  const hardpoints = hardpointResult.status === "fulfilled" ? hardpointResult.value : null;
+  const mfr = manufacturerResult.status === "fulfilled" ? manufacturerResult.value : null;
+
   let fallbackText = `**${vehicleDisplayName(v)}**\n\n`;
   fallbackText += `- Manufacturer: ${v.company_name}\n`;
   fallbackText += `- Cargo: ${v.scu} SCU\n`;
@@ -914,6 +940,12 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   const roles = getVehicleRoles(v);
   if (roles.length > 0) fallbackText += `- Roles: ${roles.join(", ")}\n`;
 
+  // Wiki-sourced fields
+  if (wiki?.career) fallbackText += `- Career: ${wiki.career}\n`;
+  if (wiki?.pledgeCost) fallbackText += `- Pledge Cost: $${wiki.pledgeCost}\n`;
+  if (wiki?.productionState) fallbackText += `- Status: ${wiki.productionState}\n`;
+  if (wiki?.series) fallbackText += `- Series: ${wiki.series}\n`;
+
   let dataSummary = `${vehicleDisplayName(v)} by ${v.company_name}. Cargo: ${v.scu} SCU. Crew: ${v.crew}. Pad size: ${v.pad_type || "N/A"}.`;
   if (v.length > 0) dataSummary += ` Dimensions: ${v.length}m x ${v.width}m x ${v.height}m.`;
   if (v.mass) dataSummary += ` Mass: ${formatPrice(v.mass)} kg.`;
@@ -921,14 +953,7 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (v.fuel_hydrogen) dataSummary += ` Hydrogen fuel: ${formatPrice(v.fuel_hydrogen)}.`;
   if (roles.length > 0) dataSummary += ` Roles: ${roles.join(", ")}.`;
 
-  // Enrich with in-game purchase and rental prices
-  const [purchaseResult, rentalResult] = await Promise.allSettled([
-    getVehiclePurchasePrices({ id_vehicle: v.id }),
-    getVehicleRentalPrices({ id_vehicle: v.id }),
-  ]);
-  const purchases = purchaseResult.status === "fulfilled" ? purchaseResult.value : [];
-  const rentals = rentalResult.status === "fulfilled" ? rentalResult.value : [];
-
+  // In-game prices
   if (purchases.length > 0) {
     const cheapest = [...purchases].sort((a, b) => a.price_buy - b.price_buy)[0];
     fallbackText += `- In-game Price: from ${formatPrice(cheapest.price_buy)} aUEC (${purchases.length} locations)\n`;
@@ -940,9 +965,35 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
     dataSummary += ` Rental from ${formatPrice(cheapest.price_rent)} aUEC at ${rentals.length} locations.`;
   }
 
+  // Wiki lore — append truncated description for LLM context
+  if (wiki?.lore) {
+    const loreSummary = truncateLore(wiki.lore, 2);
+    dataSummary += ` Lore: ${loreSummary}`;
+    fallbackText += `\n${wiki.lore.split(/[.!?]\s/)[0]}.\n`;
+  }
+
+  // Manufacturer context for LLM
+  if (mfr?.lore) {
+    dataSummary += ` Manufacturer (${v.company_name}): ${truncateLore(mfr.lore, 1)}`;
+  }
+  if (mfr?.headquarters) {
+    dataSummary += ` Headquartered in ${mfr.headquarters}.`;
+  }
+
+  // Hardpoint summary for LLM
+  if (hardpoints?.summary) {
+    dataSummary += ` Hardpoints: ${hardpoints.summary.slice(0, 300)}`;
+  }
+
+  // Image from wiki
+  const image = wiki?.imageUrl
+    ? { url: wiki.imageUrl, alt: vehicleDisplayName(v), caption: `${vehicleDisplayName(v)} — via Star Citizen Wiki` }
+    : undefined;
+
   return {
     text: fallbackText,
     fallbackText,
+    image,
     dataContext: {
       intent: "vehicle_info",
       dataDescription: dataSummary,
@@ -997,7 +1048,9 @@ async function handleVehicleCompare(query: ParsedQuery): Promise<HandlerResult> 
   rows.push(["Roles", getVehicleRoles(a).join(", ") || "N/A", getVehicleRoles(b).join(", ") || "N/A"]);
 
   const cargoWinner = a.scu > b.scu ? a.name : b.scu > a.scu ? b.name : "tied";
-  const dataSummary = `Comparing ${a.name} vs ${b.name}. ${a.name}: ${a.scu} SCU cargo, ${a.crew} crew, ${a.pad_type || "N/A"} pad. ${b.name}: ${b.scu} SCU cargo, ${b.crew} crew, ${b.pad_type || "N/A"} pad. Cargo winner: ${cargoWinner}. A comparison table is shown separately.`;
+  const rolesA = getVehicleRoles(a).join(", ") || "N/A";
+  const rolesB = getVehicleRoles(b).join(", ") || "N/A";
+  const dataSummary = `Comparing ${a.name} (by ${a.company_name}) vs ${b.name} (by ${b.company_name}). ${a.name}: ${a.scu} SCU cargo, ${a.crew} crew, ${a.pad_type || "N/A"} pad, roles: ${rolesA}. ${b.name}: ${b.scu} SCU cargo, ${b.crew} crew, ${b.pad_type || "N/A"} pad, roles: ${rolesB}. Cargo winner: ${cargoWinner}. A comparison table is shown separately.`;
 
   return {
     text: fallbackText,
@@ -1387,13 +1440,59 @@ async function handleOutpostInfo(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 async function handleLocationInfo(query: ParsedQuery): Promise<HandlerResult> {
+  // Fallback: if no specific entity resolved, try to resolve from locationName or raw query text
+  if (!query.moon && !query.planet && !query.starSystem) {
+    const { terminals, starSystemMap } = await getReferenceData();
+    // Try locationName first, then extract from raw query
+    let locationName = query.locationName;
+    if (!locationName) {
+      const match = query.raw.match(/(?:tell me about|info about|info on|what'?s at|whats at)\s+(.+?)(?:\?|$)/i);
+      if (match) locationName = match[1].trim();
+    }
+    // Last resort: use the full raw query stripped of common words
+    if (!locationName) {
+      locationName = query.raw.replace(/^(tell me about|what is|what's|whats|info on|info about)\s+/i, "").replace(/[?!.]/g, "").trim();
+    }
+    if (locationName) {
+      const resolvedMoon = findMoon(locationName, terminals);
+      if (resolvedMoon) {
+        query = { ...query, moon: resolvedMoon };
+      } else {
+        const resolvedPlanet = findPlanet(locationName, terminals);
+        if (resolvedPlanet) {
+          query = { ...query, planet: resolvedPlanet };
+        } else {
+          const resolvedSystem = findStarSystem(locationName, starSystemMap);
+          if (resolvedSystem) {
+            query = { ...query, starSystem: resolvedSystem };
+          }
+        }
+      }
+    }
+  }
+
   if (query.moon) {
-    const outposts = await getOutposts({ id_moon: query.moon.moonId });
-    const available = outposts.filter((o) => o.is_available);
+    const [outposts, wikiResult] = await Promise.allSettled([
+      getOutposts({ id_moon: query.moon.moonId }),
+      getPlanetWikiData(query.moon.moonName),
+    ]);
+    const outpostList = outposts.status === "fulfilled" ? outposts.value : [];
+    const wiki = wikiResult.status === "fulfilled" ? wikiResult.value : null;
+
+    // Determine parent planet from outpost data
+    const parentPlanet = outpostList.find((o) => o.planet_name)?.planet_name;
+    const parentSystem = outpostList.find((o) => o.star_system_name)?.star_system_name;
+
+    const available = outpostList.filter((o) => o.is_available);
     const withTrade = available.filter((o) => o.has_trade_terminal).length;
     const withRefinery = available.filter((o) => o.has_refinery).length;
 
-    let fallbackText = `**${query.moon.moonName}** overview:\n\n`;
+    let fallbackText = `**${query.moon.moonName}**`;
+    if (parentPlanet) fallbackText += ` (moon of ${parentPlanet})`;
+    fallbackText += ` overview:\n\n`;
+    if (wiki?.lore) {
+      fallbackText += `${wiki.lore.split(/[.!?]\s/)[0]}.\n\n`;
+    }
     fallbackText += `- Outposts: ${available.length}\n`;
     fallbackText += `- With Trade Terminals: ${withTrade}\n`;
     fallbackText += `- With Refineries: ${withRefinery}\n\n`;
@@ -1403,28 +1502,41 @@ async function handleLocationInfo(query: ParsedQuery): Promise<HandlerResult> {
       fallbackText += `- "Sell Laranite on ${query.moon.moonName}"`;
     }
 
+    let dataSummary = `${query.moon.moonName} is a moon of ${parentPlanet || "unknown planet"}${parentSystem ? ` in the ${parentSystem} system` : ""}. It has ${available.length} outposts, ${withTrade} with trade terminals, ${withRefinery} with refineries.`;
+    if (wiki?.lore) dataSummary += ` Lore: ${truncateLore(wiki.lore, 2)}`;
+
     return {
       text: fallbackText,
       fallbackText,
       dataContext: {
         intent: "location_info",
-        dataDescription: `${query.moon.moonName} has ${available.length} outposts, ${withTrade} with trade terminals, ${withRefinery} with refineries.`,
+        dataDescription: dataSummary,
       },
     };
   }
 
   if (query.planet) {
-    const [stations, cities, outposts] = await Promise.all([
+    const [stations, cities, outposts, wikiResult] = await Promise.allSettled([
       getSpaceStations({ id_planet: query.planet.planetId }),
       getCities({ id_planet: query.planet.planetId }),
       getOutposts({ id_planet: query.planet.planetId }),
+      getPlanetWikiData(query.planet.planetName, query.starSystem?.name),
     ]);
+    const stationList = stations.status === "fulfilled" ? stations.value : [];
+    const cityList = cities.status === "fulfilled" ? cities.value : [];
+    const outpostList = outposts.status === "fulfilled" ? outposts.value : [];
+    const wiki = wikiResult.status === "fulfilled" ? wikiResult.value : null;
 
-    const stationCount = stations.filter((s) => s.is_available).length;
-    const cityCount = cities.filter((c) => c.is_available).length;
-    const outpostCount = outposts.filter((o) => o.is_available).length;
+    const stationCount = stationList.filter((s) => s.is_available).length;
+    const cityCount = cityList.filter((c) => c.is_available).length;
+    const outpostCount = outpostList.filter((o) => o.is_available).length;
 
     let fallbackText = `**${query.planet.planetName}** overview:\n\n`;
+    if (wiki?.lore) {
+      fallbackText += `${wiki.lore.split(/[.!?]\s/)[0]}.\n\n`;
+    }
+    if (wiki?.type) fallbackText += `- Type: ${wiki.type}\n`;
+    if (wiki?.habitable) fallbackText += `- Habitable: ${wiki.habitable}\n`;
     fallbackText += `- Space Stations: ${stationCount}\n`;
     fallbackText += `- Cities: ${cityCount}\n`;
     fallbackText += `- Outposts: ${outpostCount}\n\n`;
@@ -1433,38 +1545,86 @@ async function handleLocationInfo(query: ParsedQuery): Promise<HandlerResult> {
     fallbackText += `- "Cities on ${query.planet.planetName}"\n`;
     fallbackText += `- "Outposts on ${query.planet.planetName}"`;
 
+    // Determine parent system from data if not in query
+    const parentSystem = query.starSystem?.name
+      || stationList.find((s) => s.star_system_name)?.star_system_name
+      || cityList.find((c) => c.star_system_name)?.star_system_name
+      || "";
+    let dataSummary = `${query.planet.planetName} is a planet${parentSystem ? ` in the ${parentSystem} system` : ""}. It has ${stationCount} space stations, ${cityCount} cities, and ${outpostCount} outposts.`;
+    if (wiki?.lore) dataSummary += ` Lore: ${truncateLore(wiki.lore, 2)}`;
+    if (wiki?.type) dataSummary += ` Type: ${wiki.type}.`;
+    if (wiki?.habitable) dataSummary += ` Habitable: ${wiki.habitable}.`;
+    if (wiki?.affiliation) dataSummary += ` Affiliation: ${wiki.affiliation}.`;
+
     return {
       text: fallbackText,
       fallbackText,
       dataContext: {
         intent: "location_info",
-        dataDescription: `${query.planet.planetName} has ${stationCount} space stations, ${cityCount} cities, and ${outpostCount} outposts.`,
+        dataDescription: dataSummary,
       },
     };
   }
 
   if (query.starSystem) {
-    const [stations, cities, outposts] = await Promise.all([
+    const [stations, cities, outposts, wikiResult, jumpResult] = await Promise.allSettled([
       getSpaceStations({ id_star_system: query.starSystem.id }),
       getCities({ id_star_system: query.starSystem.id }),
       getOutposts({ id_star_system: query.starSystem.id }),
+      getSystemWikiData(query.starSystem.name),
+      getJumpPoints(query.starSystem.name),
     ]);
 
-    const stationCount = stations.filter((s) => s.is_available).length;
-    const cityCount = cities.filter((c) => c.is_available).length;
-    const outpostCount = outposts.filter((o) => o.is_available).length;
+    const stationList = stations.status === "fulfilled" ? stations.value : [];
+    const cityList = cities.status === "fulfilled" ? cities.value : [];
+    const outpostList = outposts.status === "fulfilled" ? outposts.value : [];
+    const wiki = wikiResult.status === "fulfilled" ? wikiResult.value : null;
+    const jumpPoints = jumpResult.status === "fulfilled" ? jumpResult.value : [];
+
+    const stationCount = stationList.filter((s) => s.is_available).length;
+    const cityCount = cityList.filter((c) => c.is_available).length;
+    const outpostCount = outpostList.filter((o) => o.is_available).length;
 
     let fallbackText = `**${query.starSystem.name} System** overview:\n\n`;
+    if (wiki?.lore) {
+      fallbackText += `${wiki.lore.split(/[.!?]\s/)[0]}.\n\n`;
+    }
+    if (wiki?.type) fallbackText += `- Type: ${wiki.type}\n`;
+    if (wiki?.starType) fallbackText += `- Star Type: ${wiki.starType}\n`;
+    if (wiki?.affiliation) fallbackText += `- Affiliation: ${wiki.affiliation}\n`;
     fallbackText += `- Space Stations: ${stationCount}\n`;
     fallbackText += `- Cities: ${cityCount}\n`;
-    fallbackText += `- Outposts: ${outpostCount}`;
+    fallbackText += `- Outposts: ${outpostCount}\n`;
+
+    // Jump points
+    if (jumpPoints.length > 0) {
+      fallbackText += `\n**Jump Point Connections:**\n`;
+      for (const jp of jumpPoints) {
+        const dest = jp.from.toLowerCase() === query.starSystem.name.toLowerCase() ? jp.to : jp.from;
+        const sizeLabel = jp.size ? ` (${jp.size})` : "";
+        fallbackText += `- ${query.starSystem.name} ↔ ${dest}${sizeLabel}\n`;
+      }
+    }
+
+    let dataSummary = `${query.starSystem.name} system has ${stationCount} space stations, ${cityCount} cities, and ${outpostCount} outposts.`;
+    if (wiki?.starType) dataSummary += ` Star type: ${wiki.starType}.`;
+    if (wiki?.lore) dataSummary += ` Lore: ${truncateLore(wiki.lore, 2)}`;
+    if (wiki?.type) dataSummary += ` Type: ${wiki.type}.`;
+    if (wiki?.affiliation) dataSummary += ` Affiliation: ${wiki.affiliation}.`;
+    if (jumpPoints.length > 0) {
+      const jpDetails = jumpPoints.map((jp) => {
+        const dest = jp.from.toLowerCase() === query.starSystem!.name.toLowerCase() ? jp.to : jp.from;
+        return jp.size ? `${dest} (${jp.size})` : dest;
+      });
+      dataSummary += ` Jump point connections: ${jpDetails.join(", ")}.`;
+    }
 
     return {
       text: fallbackText,
       fallbackText,
       dataContext: {
         intent: "location_info",
-        dataDescription: `${query.starSystem.name} system has ${stationCount} space stations, ${cityCount} cities, and ${outpostCount} outposts.`,
+        dataDescription: dataSummary,
       },
     };
   }
@@ -1526,7 +1686,15 @@ async function handleMultiHop(query: ParsedQuery): Promise<HandlerResult> {
     }
 
     const stopCount = result.stops.filter((s) => s.action !== "fly").length;
-    const dataSummary = `Multi-hop route plan for ${shipName} (${scu} SCU) with ${stopCount} trade stops. Total profit: ${formatPrice(result.totalProfit)} aUEC. Investment: ${formatPrice(result.totalInvestment)} aUEC. A map is shown separately.`;
+    // Include actual stop details so the LLM doesn't fabricate the itinerary
+    const stopDetails = result.stops
+      .filter((s) => s.action !== "fly")
+      .map((s) => {
+        if (s.action === "buy") return `Buy ${s.commodityName} at ${s.terminalName} (${formatPrice(s.pricePerScu!)} aUEC/SCU)`;
+        return `Sell ${s.commodityName} at ${s.terminalName} (${formatPrice(s.pricePerScu!)} aUEC/SCU, +${formatPrice(s.profit!)} profit)`;
+      })
+      .join(". ");
+    const dataSummary = `Multi-hop route plan for ${shipName} (${scu} SCU)${result.system ? ` in ${result.system}` : ""} with ${stopCount} trade stops. Steps: ${stopDetails}. Total profit: ${formatPrice(result.totalProfit)} aUEC. Investment: ${formatPrice(result.totalInvestment)} aUEC. A map is shown separately.`;
 
     return {
       text: fallbackText,
@@ -2113,8 +2281,31 @@ async function handleRefineryMethod(query: ParsedQuery): Promise<HandlerResult> 
 // --- Fuel handler ---
 
 async function handleFuelPrices(query: ParsedQuery): Promise<HandlerResult> {
-  const { fuelPrices } = await getReferenceData();
-  let filtered = [...fuelPrices];
+  const { fuelPrices, terminalMap } = await getReferenceData();
+
+  // Enrich fuel prices with terminal location data (API only returns terminal_name, no location fields)
+  type EnrichedFuelPrice = typeof fuelPrices[0] & {
+    star_system_name: string;
+    planet_name: string | null;
+    moon_name: string | null;
+    space_station_name: string | null;
+    city_name: string | null;
+    outpost_name: string | null;
+  };
+  const enriched: EnrichedFuelPrice[] = fuelPrices.map((f) => {
+    const terminal = terminalMap.get(f.id_terminal);
+    return {
+      ...f,
+      star_system_name: terminal?.star_system_name ?? "",
+      planet_name: terminal?.planet_name ?? null,
+      moon_name: terminal?.moon_name ?? null,
+      space_station_name: terminal?.space_station_name ?? null,
+      city_name: terminal?.city_name ?? null,
+      outpost_name: terminal?.outpost_name ?? null,
+    };
+  });
+
+  let filtered = [...enriched];
 
   // Detect fuel type from query
   const lower = query.raw.toLowerCase();
@@ -2127,7 +2318,7 @@ async function handleFuelPrices(query: ParsedQuery): Promise<HandlerResult> {
     filtered = filtered.filter((f) => f.commodity_name.toLowerCase().includes("quantum"));
   }
 
-  // Filter by location (reuses generic filterByLocation which also handles moon)
+  // Filter by location (now works because we enriched with terminal location data)
   filtered = filterByLocation(filtered, query);
 
   // Sort by price ascending (cheapest first)

@@ -117,8 +117,8 @@ Return JSON with this exact structure:
 - refinery_yields: User wants refinery yield bonuses for a commodity (where to refine). Optional: commodity, star_system
 - refinery_method: User asks about refining methods (Dinyx Solventation, Ferron Exchange, Cormack, etc.)
 - fuel_prices: User wants fuel prices (hydrogen or quantum). Optional: star_system, planet
-- vehicle_buy: User wants to buy a ship in-game with aUEC (not pledge store). Needs: vehicle
-- vehicle_rent: User wants to rent a ship in-game. Needs: vehicle
+- vehicle_buy: User wants to buy a ship in-game with aUEC (not pledge store). Optional: vehicle (if no vehicle, list all buyable ships)
+- vehicle_rent: User wants to rent a ship in-game. Optional: vehicle (if no vehicle, list all rentable ships)
 - help: User asks what you can do, your features, or how to use you
 - unknown: Cannot determine intent.
 
@@ -201,16 +201,31 @@ function resolveEntities(
     ? findTerminal(ent.terminal, terminals)
     : undefined;
 
+  // Fallback: if LLM put a name in "location" but didn't fill moon/planet/star_system,
+  // try to resolve the location string as one of those entity types
+  let resolvedMoon = moon;
+  let resolvedPlanet = planet;
+  let resolvedStarSystem = starSystem;
+  if (ent.location && !moon && !planet && !starSystem) {
+    resolvedMoon = findMoon(ent.location, terminals);
+    if (!resolvedMoon) {
+      resolvedPlanet = findPlanet(ent.location, terminals);
+    }
+    if (!resolvedMoon && !resolvedPlanet) {
+      resolvedStarSystem = findStarSystem(ent.location, starSystemMap);
+    }
+  }
+
   return {
     intent: classification.intent,
     commodity,
     commodities: commodities.length > 0 ? commodities : undefined,
     vehicle,
     vehicle2,
-    starSystem,
+    starSystem: resolvedStarSystem,
     starSystem2,
-    planet,
-    moon,
+    planet: resolvedPlanet,
+    moon: resolvedMoon,
     terminal,
     locationName: ent.location ?? undefined,
     budget: ent.budget ?? undefined,
@@ -268,6 +283,15 @@ function postProcess(parsed: ParsedQuery): ParsedQuery {
       intent = "vehicle_buy";
     } else {
       intent = "vehicle_info";
+    }
+  }
+
+  // No vehicle but rent/buy keywords with help/unknown → vehicle_rent/vehicle_buy (list all)
+  if (!parsed.vehicle && ["help", "unknown"].includes(intent)) {
+    if (hasRentKeyword(lower)) {
+      intent = "vehicle_rent";
+    } else if (hasBuyKeyword(lower) && (lower.includes("ship") || lower.includes("vehicle"))) {
+      intent = "vehicle_buy";
     }
   }
 

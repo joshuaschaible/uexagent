@@ -551,12 +551,6 @@ export type FuelPrice = {
   price_buy_avg: number;
   commodity_name: string;
   terminal_name: string;
-  star_system_name: string;
-  planet_name: string | null;
-  moon_name: string | null;
-  space_station_name: string | null;
-  city_name: string | null;
-  outpost_name: string | null;
 };
 
 export async function getFuelPricesAll(): Promise<FuelPrice[]> {

@@ -23,6 +23,11 @@ export type Message = {
     routes: { from: string; to: string; profit: number; commodity: string }[];
     highlights: string[];
   };
+  image?: {
+    url: string;
+    alt: string;
+    caption?: string;
+  };
   profit?: ProfitData;
   isError?: boolean;
   isStreaming?: boolean;
@@ -63,6 +68,11 @@ export type ChatResponse = {
     system: string;
     routes: { from: string; to: string; profit: number; commodity: string }[];
     highlights: string[];
+  };
+  image?: {
+    url: string;
+    alt: string;
+    caption?: string;
   };
   profit?: ProfitData;
   isLLM?: boolean;

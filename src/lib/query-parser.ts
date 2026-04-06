@@ -152,7 +152,8 @@ const VEHICLE_BUY_KEYWORDS = [
 ];
 const VEHICLE_RENT_KEYWORDS = [
   "rent a", "rent the", "rental price", "rental cost",
-  "where can i rent", "ship rental",
+  "where can i rent", "can i rent", "ships can i rent",
+  "ship rental", "ships for rent", "available for rent",
 ];
 const HELP_KEYWORDS = [
   "what can you do", "what do you do", "what can you help",
@@ -564,6 +565,11 @@ export function parseQuery(
   if (terminal && !commodity && (intent === "sell" || intent === "buy")) {
     if (!modifiers.includes(intent)) modifiers.push(intent);
     intent = "terminal_info";
+  }
+
+  // If we found a location but intent is still unknown, infer location_info
+  if ((starSystem || planet || moon) && intent === "unknown") {
+    intent = "location_info";
   }
 
   // Extract a location name for generic location queries

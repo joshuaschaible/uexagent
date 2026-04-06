@@ -94,7 +94,7 @@ export function MentionBackdrop({ text, mentions }: MentionBackdropProps) {
         seg.type ? (
           <span
             key={i}
-            className={`rounded px-0.5 ${MENTION_COLORS[seg.type] || "bg-primary/20 text-primary"}`}
+            className={`rounded px-0.5 font-semibold ${MENTION_COLORS[seg.type] || "bg-primary/20 text-primary"}`}
           >
             {seg.text}
           </span>
