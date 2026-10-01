@@ -1,0 +1,2973 @@
+{
+  "source": "https://api.uexcorp.space/2.0",
+  "captured": "2026-10-01",
+  "categories": [
+    {
+      "id": 19,
+      "type": "item",
+      "section": "Systems",
+      "name": "Coolers"
+    },
+    {
+      "id": 21,
+      "type": "item",
+      "section": "Systems",
+      "name": "Power Plants"
+    },
+    {
+      "id": 22,
+      "type": "item",
+      "section": "Systems",
+      "name": "Quantum Drives"
+    },
+    {
+      "id": 23,
+      "type": "item",
+      "section": "Systems",
+      "name": "Shield Generators"
+    },
+    {
+      "id": 81,
+      "type": "item",
+      "section": "Systems",
+      "name": "Batteries"
+    },
+    {
+      "id": 82,
+      "type": "item",
+      "section": "Avionics",
+      "name": "Flight Blade"
+    },
+    {
+      "id": 83,
+      "type": "item",
+      "section": "Avionics",
+      "name": "Radar"
+    },
+    {
+      "id": 84,
+      "type": "item",
+      "section": "Systems",
+      "name": "Gravity Generator"
+    },
+    {
+      "id": 86,
+      "type": "item",
+      "section": "Propulsion",
+      "name": "Jump Modules"
+    },
+    {
+      "id": 103,
+      "type": "item",
+      "section": "Systems",
+      "name": "Life Support Generator"
+    }
+  ],
+  "items": [
+    {
+      "id": 1960,
+      "id_category": 22,
+      "name": "Eos",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 599,
+      "id_category": 23,
+      "name": "HEX",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 1351,
+      "id_category": 23,
+      "name": "INK",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 604,
+      "id_category": 23,
+      "name": "PIN",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 979,
+      "id_category": 23,
+      "name": "WEB",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 589,
+      "id_category": 22,
+      "name": "Agni",
+      "size": "3",
+      "game_version": "4.4"
+    },
+    {
+      "id": 600,
+      "id_category": 23,
+      "name": "BLOC",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2031,
+      "id_category": 22,
+      "name": "Bolt",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 150,
+      "id_category": 22,
+      "name": "Echo",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2043,
+      "id_category": 19,
+      "name": "Endo",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 948,
+      "id_category": 22,
+      "name": "Kama",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 972,
+      "id_category": 22,
+      "name": "Nova",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1524,
+      "id_category": 23,
+      "name": "RPEL",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 148,
+      "id_category": 22,
+      "name": "Rush",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5554,
+      "id_category": 83,
+      "name": "Sens",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 1352,
+      "id_category": 23,
+      "name": "STOP",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 6039,
+      "id_category": 83,
+      "name": "Tige",
+      "size": "1",
+      "game_version": "4.10.0"
+    },
+    {
+      "id": 1909,
+      "id_category": 22,
+      "name": "TS-2",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5599,
+      "id_category": 83,
+      "name": "V880",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 2114,
+      "id_category": 23,
+      "name": "Veil",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5103,
+      "id_category": 83,
+      "name": "Voir",
+      "size": "",
+      "game_version": "4.10.0"
+    },
+    {
+      "id": 1934,
+      "id_category": 23,
+      "name": "Ward",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 976,
+      "id_category": 22,
+      "name": "XL-1",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5531,
+      "id_category": 83,
+      "name": "Agure",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 4020,
+      "id_category": 19,
+      "name": "Algid",
+      "size": "4",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 601,
+      "id_category": 23,
+      "name": "ARMOR",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2041,
+      "id_category": 23,
+      "name": "Aspis",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1959,
+      "id_category": 22,
+      "name": "Atlas",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2152,
+      "id_category": 22,
+      "name": "Bolon",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 144,
+      "id_category": 22,
+      "name": "Burst",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 160,
+      "id_category": 23,
+      "name": "Cloak",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 7790,
+      "id_category": 19,
+      "name": "Draug",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 2030,
+      "id_category": 22,
+      "name": "Drift",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 7944,
+      "id_category": 19,
+      "name": "Elsen",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 5526,
+      "id_category": 83,
+      "name": "Epier",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1936,
+      "id_category": 23,
+      "name": "Falco",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5542,
+      "id_category": 83,
+      "name": "Fawad",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 145,
+      "id_category": 22,
+      "name": "Flash",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 147,
+      "id_category": 22,
+      "name": "Flood",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1748,
+      "id_category": 23,
+      "name": "FR-66",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1750,
+      "id_category": 23,
+      "name": "FR-76",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 158,
+      "id_category": 23,
+      "name": "FR-86",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 126,
+      "id_category": 19,
+      "name": "Gelid",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 581,
+      "id_category": 21,
+      "name": "Genoa",
+      "size": "2",
+      "game_version": "4.1"
+    },
+    {
+      "id": 2040,
+      "id_category": 23,
+      "name": "GUARD",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1525,
+      "id_category": 23,
+      "name": "HAVEN",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1961,
+      "id_category": 22,
+      "name": "Khaos",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1768,
+      "id_category": 21,
+      "name": "Lotus",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1962,
+      "id_category": 22,
+      "name": "Metis",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1766,
+      "id_category": 19,
+      "name": "Polar",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2154,
+      "id_category": 22,
+      "name": "Quest",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 2039,
+      "id_category": 21,
+      "name": "Radix",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2824,
+      "id_category": 19,
+      "name": "Serac",
+      "size": "4",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1751,
+      "id_category": 23,
+      "name": "Sheut",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 974,
+      "id_category": 22,
+      "name": "Siren",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5559,
+      "id_category": 83,
+      "name": "SNSR5",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5567,
+      "id_category": 83,
+      "name": "SNSR7",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 2044,
+      "id_category": 19,
+      "name": "Taiga",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1527,
+      "id_category": 23,
+      "name": "Targa",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1932,
+      "id_category": 22,
+      "name": "Tyche",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 155,
+      "id_category": 23,
+      "name": "Umbra",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1531,
+      "id_category": 22,
+      "name": "Vesta",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1347,
+      "id_category": 22,
+      "name": "VK-00",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 6355,
+      "id_category": 83,
+      "name": "Vogel",
+      "size": "",
+      "game_version": "4.10.0"
+    },
+    {
+      "id": 1930,
+      "id_category": 22,
+      "name": "Yaluk",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5529,
+      "id_category": 83,
+      "name": "Abetti",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 2157,
+      "id_category": 22,
+      "name": "Aither",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 5532,
+      "id_category": 83,
+      "name": "Anysta",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 958,
+      "id_category": 19,
+      "name": "Arctic",
+      "size": "2",
+      "game_version": "4.10.1"
+    },
+    {
+      "id": 950,
+      "id_category": 23,
+      "name": "Armada",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2025,
+      "id_category": 19,
+      "name": "Aufeis",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 978,
+      "id_category": 23,
+      "name": "Bamoty",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 973,
+      "id_category": 22,
+      "name": "Beacon",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1955,
+      "id_category": 19,
+      "name": "Berian",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1758,
+      "id_category": 21,
+      "name": "Bolide",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2150,
+      "id_category": 19,
+      "name": "Boreal",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 928,
+      "id_category": 19,
+      "name": "Bracer",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 142,
+      "id_category": 21,
+      "name": "Breton",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 161,
+      "id_category": 23,
+      "name": "Castra",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 137,
+      "id_category": 21,
+      "name": "Cirrus",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5540,
+      "id_category": 83,
+      "name": "Devoue",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 1348,
+      "id_category": 22,
+      "name": "Erebos",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 4003,
+      "id_category": 86,
+      "name": "Exodus",
+      "size": "3",
+      "game_version": "4.1.1"
+    },
+    {
+      "id": 1928,
+      "id_category": 21,
+      "name": "ExoGen",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5541,
+      "id_category": 83,
+      "name": "Fabian",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 5543,
+      "id_category": 83,
+      "name": "Fidele",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 1923,
+      "id_category": 19,
+      "name": "Fridan",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 935,
+      "id_category": 21,
+      "name": "Fulgur",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1929,
+      "id_category": 21,
+      "name": "Ginzel",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2793,
+      "id_category": 23,
+      "name": "Glacis",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 603,
+      "id_category": 23,
+      "name": "Haltur",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1907,
+      "id_category": 22,
+      "name": "Hemera",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5547,
+      "id_category": 83,
+      "name": "Hunter",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 932,
+      "id_category": 19,
+      "name": "IceBox",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 602,
+      "id_category": 23,
+      "name": "Jaghte",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2705,
+      "id_category": 21,
+      "name": "Jennet",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1774,
+      "id_category": 21,
+      "name": "JS-300",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1775,
+      "id_category": 21,
+      "name": "JS-400",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1770,
+      "id_category": 21,
+      "name": "JS-500",
+      "size": "3",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 571,
+      "id_category": 19,
+      "name": "Kelvid",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2823,
+      "id_category": 19,
+      "name": "Kragen",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2034,
+      "id_category": 23,
+      "name": "Mirage",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 977,
+      "id_category": 22,
+      "name": "Pontes",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1933,
+      "id_category": 22,
+      "name": "Ranger",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5563,
+      "id_category": 83,
+      "name": "Resolu",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 5553,
+      "id_category": 83,
+      "name": "Savoir",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1910,
+      "id_category": 23,
+      "name": "Shroud",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5556,
+      "id_category": 83,
+      "name": "SNS-R6",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5558,
+      "id_category": 83,
+      "name": "SNS-R7",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 575,
+      "id_category": 19,
+      "name": "Tepilo",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2158,
+      "id_category": 23,
+      "name": "Trenta",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 929,
+      "id_category": 19,
+      "name": "Tundra",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 6400,
+      "id_category": 83,
+      "name": "V60-26",
+      "size": "",
+      "game_version": "4.10.0"
+    },
+    {
+      "id": 2151,
+      "id_category": 21,
+      "name": "Vortex",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 945,
+      "id_category": 22,
+      "name": "Voyage",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1530,
+      "id_category": 22,
+      "name": "Vulcan",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 971,
+      "id_category": 22,
+      "name": "Yeager",
+      "size": "2",
+      "game_version": "4.8.2"
+    },
+    {
+      "id": 2028,
+      "id_category": 21,
+      "name": "ZapJet",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1752,
+      "id_category": 22,
+      "name": "Zephyr",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5530,
+      "id_category": 83,
+      "name": "Agrippa",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 2829,
+      "id_category": 22,
+      "name": "Allegro",
+      "size": "4",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1526,
+      "id_category": 23,
+      "name": "AllStop",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5534,
+      "id_category": 83,
+      "name": "Battani",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 162,
+      "id_category": 23,
+      "name": "Bulwark",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5518,
+      "id_category": 83,
+      "name": "Capston",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5525,
+      "id_category": 83,
+      "name": "Capsulo",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 149,
+      "id_category": 22,
+      "name": "Cascade",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 938,
+      "id_category": 21,
+      "name": "Charger",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 592,
+      "id_category": 23,
+      "name": "Citadel",
+      "size": "2",
+      "game_version": "4.1"
+    },
+    {
+      "id": 576,
+      "id_category": 21,
+      "name": "Defiant",
+      "size": "",
+      "game_version": "4.1"
+    },
+    {
+      "id": 5539,
+      "id_category": 83,
+      "name": "Denning",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 939,
+      "id_category": 21,
+      "name": "Drassik",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1963,
+      "id_category": 22,
+      "name": "Drifter",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 582,
+      "id_category": 21,
+      "name": "DuraJet",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 134,
+      "id_category": 21,
+      "name": "Durango",
+      "size": "3",
+      "game_version": "4.10.1"
+    },
+    {
+      "id": 970,
+      "id_category": 21,
+      "name": "Eclipse",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5520,
+      "id_category": 83,
+      "name": "Ecouter",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 151,
+      "id_category": 22,
+      "name": "Fissure",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 4557,
+      "id_category": 83,
+      "name": "Fleming",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 586,
+      "id_category": 22,
+      "name": "FoxFire",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 954,
+      "id_category": 19,
+      "name": "Glacier",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 153,
+      "id_category": 22,
+      "name": "Goliath",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1924,
+      "id_category": 19,
+      "name": "Graupel",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 588,
+      "id_category": 22,
+      "name": "Huracan",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 956,
+      "id_category": 19,
+      "name": "IceDive",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 152,
+      "id_category": 22,
+      "name": "Impulse",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1925,
+      "id_category": 21,
+      "name": "IonWave",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 6618,
+      "id_category": 83,
+      "name": "Lephari",
+      "size": "3",
+      "game_version": "4.8.2"
+    },
+    {
+      "id": 138,
+      "id_category": 21,
+      "name": "LuxCore",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1353,
+      "id_category": 19,
+      "name": "Mercury",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1926,
+      "id_category": 21,
+      "name": "NewDawn",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1754,
+      "id_category": 23,
+      "name": "Obscura",
+      "size": "2",
+      "game_version": "4.1.1"
+    },
+    {
+      "id": 2707,
+      "id_category": 22,
+      "name": "Odyssey",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 595,
+      "id_category": 23,
+      "name": "Parapet",
+      "size": "3",
+      "game_version": "4.1"
+    },
+    {
+      "id": 5552,
+      "id_category": 83,
+      "name": "Prophet",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 593,
+      "id_category": 23,
+      "name": "Rampart",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 967,
+      "id_category": 21,
+      "name": "Regulus",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5107,
+      "id_category": 103,
+      "name": "Safehab",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 2795,
+      "id_category": 23,
+      "name": "Shimmer",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5555,
+      "id_category": 83,
+      "name": "SNS-R5X",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 5557,
+      "id_category": 83,
+      "name": "SNS-R6X",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 5566,
+      "id_category": 83,
+      "name": "SNS-R7X",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5560,
+      "id_category": 83,
+      "name": "Socoria",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 1753,
+      "id_category": 22,
+      "name": "Sojourn",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2113,
+      "id_category": 22,
+      "name": "Spectre",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2032,
+      "id_category": 22,
+      "name": "Spicule",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 2033,
+      "id_category": 23,
+      "name": "Steward",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2796,
+      "id_category": 23,
+      "name": "Sukoran",
+      "size": "2",
+      "game_version": "4.1"
+    },
+    {
+      "id": 587,
+      "id_category": 22,
+      "name": "SunFire",
+      "size": "2",
+      "game_version": "4.1"
+    },
+    {
+      "id": 1761,
+      "id_category": 19,
+      "name": "Tempest",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1919,
+      "id_category": 19,
+      "name": "Thermax",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 146,
+      "id_category": 22,
+      "name": "Torrent",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1529,
+      "id_category": 21,
+      "name": "Trommel",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5600,
+      "id_category": 83,
+      "name": "V801-11",
+      "size": "1",
+      "game_version": "4.10.1"
+    },
+    {
+      "id": 5601,
+      "id_category": 83,
+      "name": "V801-12",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 949,
+      "id_category": 22,
+      "name": "Wayfare",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5533,
+      "id_category": 83,
+      "name": "Backlund",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 1349,
+      "id_category": 22,
+      "name": "Balandin",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 594,
+      "id_category": 23,
+      "name": "Barbican",
+      "size": "3",
+      "game_version": "4.1"
+    },
+    {
+      "id": 1767,
+      "id_category": 19,
+      "name": "Blizzard",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5106,
+      "id_category": 83,
+      "name": "Chernykh",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1921,
+      "id_category": 19,
+      "name": "ColdSnap",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 585,
+      "id_category": 22,
+      "name": "Colossus",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 132,
+      "id_category": 19,
+      "name": "CoolCore",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1749,
+      "id_category": 23,
+      "name": "CoverAll",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1346,
+      "id_category": 21,
+      "name": "DayBreak",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 942,
+      "id_category": 21,
+      "name": "DeltaMax",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 141,
+      "id_category": 21,
+      "name": "DynaFlux",
+      "size": "1",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1519,
+      "id_category": 19,
+      "name": "Eco-Flow",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 7939,
+      "id_category": 19,
+      "name": "Exotherm",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 4002,
+      "id_category": 86,
+      "name": "Explorer",
+      "size": "1",
+      "game_version": "4.1.1"
+    },
+    {
+      "id": 5544,
+      "id_category": 83,
+      "name": "Fullspec",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1935,
+      "id_category": 23,
+      "name": "FullStop",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 944,
+      "id_category": 21,
+      "name": "GammaMax",
+      "size": "3",
+      "game_version": "4.8.1"
+    },
+    {
+      "id": 590,
+      "id_category": 23,
+      "name": "Guardian",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 931,
+      "id_category": 19,
+      "name": "HeatSafe",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 964,
+      "id_category": 19,
+      "name": "HeatSink",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 131,
+      "id_category": 19,
+      "name": "Hydrocel",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 930,
+      "id_category": 19,
+      "name": "HydroJet",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1927,
+      "id_category": 21,
+      "name": "HyperGen",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1931,
+      "id_category": 22,
+      "name": "Hyperion",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 583,
+      "id_category": 21,
+      "name": "IonBurst",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 584,
+      "id_category": 21,
+      "name": "IonSurge",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 140,
+      "id_category": 21,
+      "name": "LumaCore",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1755,
+      "id_category": 21,
+      "name": "MegaFlux",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5548,
+      "id_category": 83,
+      "name": "Observer",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 591,
+      "id_category": 23,
+      "name": "Palisade",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 5522,
+      "id_category": 83,
+      "name": "Pelerous",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5551,
+      "id_category": 83,
+      "name": "Predator",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 5527,
+      "id_category": 83,
+      "name": "Prevenir",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 127,
+      "id_category": 19,
+      "name": "QuikCool",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 965,
+      "id_category": 21,
+      "name": "Radiance",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2827,
+      "id_category": 21,
+      "name": "Reliance",
+      "size": null,
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 577,
+      "id_category": 21,
+      "name": "Sedulity",
+      "size": "2",
+      "game_version": "4.1"
+    },
+    {
+      "id": 936,
+      "id_category": 21,
+      "name": "SmartGen",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2825,
+      "id_category": 19,
+      "name": "Snowfall",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 133,
+      "id_category": 19,
+      "name": "SnowPack",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2038,
+      "id_category": 21,
+      "name": "SparkJet",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5561,
+      "id_category": 83,
+      "name": "Spyglass",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 139,
+      "id_category": 21,
+      "name": "StarBurn",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2828,
+      "id_category": 21,
+      "name": "Stellate",
+      "size": null,
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2797,
+      "id_category": 23,
+      "name": "Suldrath",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 966,
+      "id_category": 21,
+      "name": "SunFlare",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 952,
+      "id_category": 23,
+      "name": "SureStop",
+      "size": "3",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 5521,
+      "id_category": 83,
+      "name": "Surveyor",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1908,
+      "id_category": 22,
+      "name": "Wanderer",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1954,
+      "id_category": 19,
+      "name": "WhiteOut",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 566,
+      "id_category": 19,
+      "name": "ZeroRush",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1759,
+      "id_category": 19,
+      "name": "Avalanche",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5535,
+      "id_category": 83,
+      "name": "Broadspec",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 5538,
+      "id_category": 83,
+      "name": "Cassandra",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 1756,
+      "id_category": 21,
+      "name": "Celestial",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 934,
+      "id_category": 21,
+      "name": "Centurion",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 573,
+      "id_category": 19,
+      "name": "Chill-Max",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2042,
+      "id_category": 19,
+      "name": "ColdSurge",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1762,
+      "id_category": 19,
+      "name": "Cryo-Star",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 143,
+      "id_category": 21,
+      "name": "Diligence",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 580,
+      "id_category": 21,
+      "name": "Endurance",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 3998,
+      "id_category": 86,
+      "name": "Excelsior",
+      "size": "2",
+      "game_version": "4.1.1"
+    },
+    {
+      "id": 2115,
+      "id_category": 23,
+      "name": "ForceWall",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 940,
+      "id_category": 21,
+      "name": "Fortitude",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2155,
+      "id_category": 19,
+      "name": "FrostBite",
+      "size": "3",
+      "game_version": "4.1"
+    },
+    {
+      "id": 1922,
+      "id_category": 19,
+      "name": "FrostBurn",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 159,
+      "id_category": 23,
+      "name": "FullBlock",
+      "size": "3",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 135,
+      "id_category": 21,
+      "name": "FullForce",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 125,
+      "id_category": 19,
+      "name": "FullFrost",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 959,
+      "id_category": 19,
+      "name": "Galinstan",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 569,
+      "id_category": 19,
+      "name": "Ice-Flush",
+      "size": "3",
+      "game_version": "4.1"
+    },
+    {
+      "id": 2024,
+      "id_category": 19,
+      "name": "IcePlunge",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 946,
+      "id_category": 22,
+      "name": "LightFire",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2037,
+      "id_category": 21,
+      "name": "Maelstrom",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 933,
+      "id_category": 19,
+      "name": "NightFall",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2027,
+      "id_category": 21,
+      "name": "OverDrive",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1957,
+      "id_category": 21,
+      "name": "PowerBolt",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 957,
+      "id_category": 19,
+      "name": "RapidCool",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1528,
+      "id_category": 21,
+      "name": "Roughneck",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 927,
+      "id_category": 19,
+      "name": "SnowBlind",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 943,
+      "id_category": 21,
+      "name": "SonicLite",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 947,
+      "id_category": 22,
+      "name": "SparkFire",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 579,
+      "id_category": 21,
+      "name": "StarHeart",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 2156,
+      "id_category": 21,
+      "name": "Steadfast",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1769,
+      "id_category": 21,
+      "name": "UltraFlux",
+      "size": "2",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 6344,
+      "id_category": 83,
+      "name": "Vigilance",
+      "size": "2",
+      "game_version": "4.10.0"
+    },
+    {
+      "id": 968,
+      "id_category": 21,
+      "name": "WhiteRose",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 2792,
+      "id_category": 23,
+      "name": "6CA 'Bila'",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1920,
+      "id_category": 19,
+      "name": "BlastChill",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5104,
+      "id_category": 103,
+      "name": "ComfortAir",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 975,
+      "id_category": 22,
+      "name": "Crossfield",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 2153,
+      "id_category": 22,
+      "name": "Expedition",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 128,
+      "id_category": 19,
+      "name": "Frost-Star",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 7836,
+      "id_category": 23,
+      "name": "Holdstrong",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 1522,
+      "id_category": 19,
+      "name": "Hydropulse",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 136,
+      "id_category": 21,
+      "name": "MagnaBloom",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1760,
+      "id_category": 19,
+      "name": "Permafrost",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1757,
+      "id_category": 21,
+      "name": "QuadraCell",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 3979,
+      "id_category": 23,
+      "name": "RS-Barrier",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2708,
+      "id_category": 23,
+      "name": "SecureHyde",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 937,
+      "id_category": 21,
+      "name": "Slipstream",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2026,
+      "id_category": 21,
+      "name": "SolarFlare",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 163,
+      "id_category": 23,
+      "name": "Stronghold",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1912,
+      "id_category": 21,
+      "name": "SuperDrive",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 969,
+      "id_category": 21,
+      "name": "TigerLilly",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1956,
+      "id_category": 21,
+      "name": "TurboDrive",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 568,
+      "id_category": 19,
+      "name": "Ultra-Flow",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 963,
+      "id_category": 19,
+      "name": "VaporBlock",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1350,
+      "id_category": 23,
+      "name": "5CA 'Akura'",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 164,
+      "id_category": 23,
+      "name": "5SA 'Rhada'",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1354,
+      "id_category": 19,
+      "name": "ArcticStorm",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 574,
+      "id_category": 19,
+      "name": "FlashFreeze",
+      "size": "1",
+      "game_version": "4.1"
+    },
+    {
+      "id": 5545,
+      "id_category": 83,
+      "name": "Fullspec-Go",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 4854,
+      "id_category": 82,
+      "name": "MPUV-1C PHB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4855,
+      "id_category": 82,
+      "name": "MPUV-1C TSB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4856,
+      "id_category": 82,
+      "name": "MPUV-1P PHB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4857,
+      "id_category": 82,
+      "name": "MPUV-1P TSB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4852,
+      "id_category": 82,
+      "name": "MPUV-1T PHB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4853,
+      "id_category": 82,
+      "name": "MPUV-1T TSB",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5549,
+      "id_category": 83,
+      "name": "Observer-Go",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5528,
+      "id_category": 83,
+      "name": "Surveyor-Go",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 1523,
+      "id_category": 19,
+      "name": "ThermalCore",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 129,
+      "id_category": 19,
+      "name": "Winter-Star",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 157,
+      "id_category": 23,
+      "name": "6MA 'Kozane'",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 598,
+      "id_category": 23,
+      "name": "7CA 'Nargun'",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 597,
+      "id_category": 23,
+      "name": "7MA 'Lorica'",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 572,
+      "id_category": 19,
+      "name": "AbsoluteZero",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5536,
+      "id_category": 83,
+      "name": "Broadspec-Go",
+      "size": "0",
+      "game_version": null
+    },
+    {
+      "id": 1521,
+      "id_category": 19,
+      "name": "Cryo-Star EX",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 955,
+      "id_category": 19,
+      "name": "Cryo-Star SL",
+      "size": "0",
+      "game_version": "4.9"
+    },
+    {
+      "id": 124,
+      "id_category": 19,
+      "name": "Cryo-Star XL",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5546,
+      "id_category": 83,
+      "name": "Fullspec-Max",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 578,
+      "id_category": 21,
+      "name": "IonSurge Pro",
+      "size": "3",
+      "game_version": "4.1"
+    },
+    {
+      "id": 941,
+      "id_category": 21,
+      "name": "LightBlossom",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 7112,
+      "id_category": 83,
+      "name": "Mauler Radar",
+      "size": "2",
+      "game_version": null
+    },
+    {
+      "id": 5550,
+      "id_category": 83,
+      "name": "Observer-Max",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 2794,
+      "id_category": 23,
+      "name": "SecureScreen",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 951,
+      "id_category": 23,
+      "name": "SecureShield",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2706,
+      "id_category": 21,
+      "name": "SparkJet Pro",
+      "size": "3",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5524,
+      "id_category": 83,
+      "name": "Surveyor-Max",
+      "size": "3",
+      "game_version": null
+    },
+    {
+      "id": 156,
+      "id_category": 23,
+      "name": "6SA 'Arbiter'",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 596,
+      "id_category": 23,
+      "name": "7SA 'Concord'",
+      "size": "1",
+      "game_version": "4.9"
+    },
+    {
+      "id": 5537,
+      "id_category": 83,
+      "name": "Broadspec-Max",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 130,
+      "id_category": 19,
+      "name": "Frost-Star EX",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 1520,
+      "id_category": 19,
+      "name": "Frost-Star SL",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1918,
+      "id_category": 19,
+      "name": "Frost-Star XL",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 1958,
+      "id_category": 21,
+      "name": "FullForce Pro",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 7010,
+      "id_category": 19,
+      "name": "Mauler Cooler",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 5519,
+      "id_category": 83,
+      "name": "Observer-Lite",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 1772,
+      "id_category": 21,
+      "name": "QuadraCell MT",
+      "size": "2",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 1773,
+      "id_category": 21,
+      "name": "QuadraCell MX",
+      "size": "3",
+      "game_version": "4.8.3"
+    },
+    {
+      "id": 5523,
+      "id_category": 83,
+      "name": "Surveyor-Lite",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 1911,
+      "id_category": 23,
+      "name": "5MA 'Chimalli'",
+      "size": "2",
+      "game_version": "4.9"
+    },
+    {
+      "id": 961,
+      "id_category": 19,
+      "name": "Winter-Star EX",
+      "size": "2",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 960,
+      "id_category": 19,
+      "name": "Winter-Star SL",
+      "size": "0",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 962,
+      "id_category": 19,
+      "name": "Winter-Star XL",
+      "size": "3",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 5105,
+      "id_category": 103,
+      "name": "ComfortAir Plus",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 1771,
+      "id_category": 21,
+      "name": "Fierell Cascade",
+      "size": "1",
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 2826,
+      "id_category": 21,
+      "name": "Main Powerplant",
+      "size": null,
+      "game_version": "4.0.1"
+    },
+    {
+      "id": 7099,
+      "id_category": 21,
+      "name": "Mauler Power Plant",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 6998,
+      "id_category": 22,
+      "name": "Mauler Quantum Drive",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 6607,
+      "id_category": 83,
+      "name": "radr_rsi_s04_polaris",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 4019,
+      "id_category": 21,
+      "name": "Reclaimer Power Plant",
+      "size": null,
+      "game_version": "4.1"
+    },
+    {
+      "id": 5800,
+      "id_category": 82,
+      "name": "Shiv PHB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5801,
+      "id_category": 82,
+      "name": "Shiv TSB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4546,
+      "id_category": 82,
+      "name": "Arrow PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4547,
+      "id_category": 82,
+      "name": "Arrow TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7101,
+      "id_category": 23,
+      "name": "Mauler Shield Generator",
+      "size": "4",
+      "game_version": null
+    },
+    {
+      "id": 4551,
+      "id_category": 82,
+      "name": "Pisces PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4552,
+      "id_category": 82,
+      "name": "Pisces TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4525,
+      "id_category": 82,
+      "name": "Gladius PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4526,
+      "id_category": 82,
+      "name": "Gladius TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 6873,
+      "id_category": 82,
+      "name": "MPUV-1C PHB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6866,
+      "id_category": 82,
+      "name": "MPUV-1C TSB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6884,
+      "id_category": 82,
+      "name": "MPUV-1P PHB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6822,
+      "id_category": 82,
+      "name": "MPUV-1P TSB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6887,
+      "id_category": 82,
+      "name": "MPUV-1T PHB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6855,
+      "id_category": 82,
+      "name": "MPUV-1T TSB Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 4537,
+      "id_category": 82,
+      "name": "Redeemer PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4536,
+      "id_category": 82,
+      "name": "Redeemer TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4540,
+      "id_category": 82,
+      "name": "Scorpius PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4594,
+      "id_category": 82,
+      "name": "Scorpius TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4720,
+      "id_category": 82,
+      "name": "Arrow Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4592,
+      "id_category": 82,
+      "name": "C8R PIsces PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4548,
+      "id_category": 82,
+      "name": "C8R Pisces TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4549,
+      "id_category": 82,
+      "name": "C8X Pisces PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4550,
+      "id_category": 82,
+      "name": "C8X Pisces TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4534,
+      "id_category": 82,
+      "name": "Hammerhead PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4533,
+      "id_category": 82,
+      "name": "Hammerhead TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4542,
+      "id_category": 82,
+      "name": "MPUV Cargo PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4729,
+      "id_category": 82,
+      "name": "MPUV Cargo TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4732,
+      "id_category": 82,
+      "name": "Pisces Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 5776,
+      "id_category": 82,
+      "name": "Anvil Asgard PHB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 5777,
+      "id_category": 82,
+      "name": "Anvil Asgard TSB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 4726,
+      "id_category": 82,
+      "name": "Gladius Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4730,
+      "id_category": 82,
+      "name": "MPUV Tractor PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4543,
+      "id_category": 82,
+      "name": "MPUV Tractor TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 6845,
+      "id_category": 82,
+      "name": "MPUV-1C Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6895,
+      "id_category": 82,
+      "name": "MPUV-1P Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 6870,
+      "id_category": 82,
+      "name": "MPUV-1T Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5778,
+      "id_category": 82,
+      "name": "Anvil Carrack PHB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 5779,
+      "id_category": 82,
+      "name": "Anvil Carrack TSB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 4595,
+      "id_category": 82,
+      "name": "Avenger Titan PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4596,
+      "id_category": 82,
+      "name": "Avenger Titan TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 5785,
+      "id_category": 82,
+      "name": "Drake Clipper PHB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5786,
+      "id_category": 82,
+      "name": "Drake Clipper TSB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5787,
+      "id_category": 82,
+      "name": "Drake Corsair PHB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5788,
+      "id_category": 82,
+      "name": "Drake Corsair TSB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4733,
+      "id_category": 82,
+      "name": "Redeemer Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4734,
+      "id_category": 82,
+      "name": "Scorpius Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4529,
+      "id_category": 82,
+      "name": "Avenger Stalker PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4530,
+      "id_category": 82,
+      "name": "Avenger Stalker TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4531,
+      "id_category": 82,
+      "name": "Avenger Warlock PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4532,
+      "id_category": 82,
+      "name": "Avenger Warlock TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4724,
+      "id_category": 82,
+      "name": "C8R PIsces Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4725,
+      "id_category": 82,
+      "name": "C8X Pisces Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 5783,
+      "id_category": 82,
+      "name": "Drake Buccaneer PHB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 5784,
+      "id_category": 82,
+      "name": "Drake Buccaneer TSB Flight Blade",
+      "size": null,
+      "game_version": null
+    },
+    {
+      "id": 4727,
+      "id_category": 82,
+      "name": "Hammerhead Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4728,
+      "id_category": 82,
+      "name": "MPUV Cargo Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 5828,
+      "id_category": 82,
+      "name": "Kruger L-21 Wolf PHB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 5829,
+      "id_category": 82,
+      "name": "Kruger L-21 Wolf TSB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 4541,
+      "id_category": 82,
+      "name": "Scorpius Antares PHB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4593,
+      "id_category": 82,
+      "name": "Scorpius Antares TSB Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7330,
+      "id_category": 82,
+      "name": "Anvil Asgard Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 4731,
+      "id_category": 82,
+      "name": "MPUV Tractor Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7337,
+      "id_category": 82,
+      "name": "Anvil Carrack Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 4722,
+      "id_category": 82,
+      "name": "Avenger Titan Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7607,
+      "id_category": 82,
+      "name": "Drake Clipper Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 7603,
+      "id_category": 82,
+      "name": "Drake Corsair Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 4721,
+      "id_category": 82,
+      "name": "Avenger Stalker Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 4723,
+      "id_category": 82,
+      "name": "Avenger Warlock Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7630,
+      "id_category": 82,
+      "name": "Drake Buccaneer Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 7189,
+      "id_category": 82,
+      "name": "Kruger L-21 Wolf Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    },
+    {
+      "id": 5826,
+      "id_category": 82,
+      "name": "Kruger L-22 Alphawolf PHB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 5827,
+      "id_category": 82,
+      "name": "Kruger L-22 Alphawolf TSB Flight Blade",
+      "size": "",
+      "game_version": "4.8.0"
+    },
+    {
+      "id": 4712,
+      "id_category": 82,
+      "name": "Scorpius Antares Standard Flight Blade",
+      "size": "",
+      "game_version": null
+    },
+    {
+      "id": 7201,
+      "id_category": 82,
+      "name": "Kruger L-22 AlphaWolf Standard Flight Blade",
+      "size": "1",
+      "game_version": null
+    }
+  ]
+}

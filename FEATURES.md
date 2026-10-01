@@ -137,7 +137,7 @@ Route-profit optimization, budget trading plans, multi-stop trade routes, fleet 
 
 ## Verification notes
 
-October 1: 136 automated tests, lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
+October 1: 554 automated tests (including 415 component catalogue cases), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
 
 ## Completion rule
 

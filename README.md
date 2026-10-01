@@ -54,3 +54,9 @@ Blueprint recipes and mission unlock requirements use the public Star Citizen Wi
 - “Tell me about the Blackbox Retrieval mission”
 
 Answers preserve SCU versus discrete item quantities, minimum material quality, alternative requirement groups, required standing, immediate mission prerequisites, and the source game patch. Blueprint pool drop chances are not represented as a guarantee of receiving a particular item. Ambiguous item names or mission variants require a more specific selection. Results include source links; missing fields and upstream failures do not generate guessed requirements. Recipes show the base recipe; tier-specific crafting and personalized mission progress are not implemented.
+
+### Component catalogue regression checks
+
+Run `npm run test:components` to check every captured UEX ship component through the real suggestion and name-matching code. The offline fixture contains 415 records from ten categories, captured October 1, 2026. Tests cover original names, case, spaces, hyphens, unknown names, and collisions such as SNS-R7 versus SNSR7. Exact canonical names take precedence; ambiguous compact variants retain every matching record.
+
+Refresh deliberately with `npm run test:components:refresh`, then review the fixture diff and rerun tests. Refresh uses the existing local UEX credentials but stores only catalogue fields; ordinary tests require no network or credentials. These catalogue checks verify entity lookup, while the separate chat tests cover routing, sizes, locations, and conversational context.
