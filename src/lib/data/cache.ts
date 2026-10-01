@@ -12,6 +12,7 @@ import {
   type RefineryMethod,
   type FuelPrice,
 } from "@/lib/uex-client";
+import { clearMiningDataCache } from "./mining";
 
 type ReferenceData = {
   commodities: Commodity[];
@@ -28,6 +29,8 @@ type ReferenceData = {
 
 let cached: ReferenceData | null = null;
 let cacheTime = 0;
+let pendingLoad: Promise<ReferenceData> | null = null;
+let cacheGeneration = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 export function getCacheAge(): number {
@@ -35,8 +38,11 @@ export function getCacheAge(): number {
 }
 
 export function clearCache(): void {
+  clearMiningDataCache();
   cached = null;
   cacheTime = 0;
+  pendingLoad = null;
+  cacheGeneration++;
 }
 
 function normalize(s: string): string {
@@ -47,7 +53,24 @@ export async function getReferenceData(): Promise<ReferenceData> {
   if (cached && Date.now() - cacheTime < CACHE_TTL) {
     return cached;
   }
+  if (pendingLoad) return pendingLoad;
 
+  const generation = cacheGeneration;
+  const load = loadReferenceData().then((data) => {
+    // A manual clear during a fetch must not repopulate the cleared cache.
+    if (generation === cacheGeneration) {
+      cached = data;
+      cacheTime = Date.now();
+    }
+    return data;
+  }).finally(() => {
+    if (pendingLoad === load) pendingLoad = null;
+  });
+  pendingLoad = load;
+  return load;
+}
+
+async function loadReferenceData(): Promise<ReferenceData> {
   const [commodities, terminals, starSystems, vehicles, refineryMethods, fuelPrices] = await Promise.all([
     getCommodities(),
     getTerminals(),
@@ -82,13 +105,11 @@ export async function getReferenceData(): Promise<ReferenceData> {
     if (v.name_full) vehicleMap.set(normalize(v.name_full), v);
   }
 
-  cached = {
+  return {
     commodities, terminals, starSystems, vehicles,
     refineryMethods, fuelPrices,
     commodityMap, terminalMap, starSystemMap, vehicleMap,
   };
-  cacheTime = Date.now();
-  return cached;
 }
 
 export function findCommodity(
@@ -115,9 +136,10 @@ export function findStarSystem(
   const key = normalize(name);
   if (key.length < 3) return undefined;
   if (starSystemMap.has(key)) return starSystemMap.get(key);
-  for (const [k, v] of starSystemMap) {
-    if (k.includes(key)) return v;
-    if (key.includes(k) && k.length >= 3 && k.length >= key.length * 0.3) return v;
+  const words = ` ${name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  for (const v of starSystemMap.values()) {
+    const systemName = v.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (systemName && words.includes(` ${systemName} `)) return v;
   }
   return undefined;
 }
@@ -162,6 +184,35 @@ export function findVehicle(
   return undefined;
 }
 
+/** Resolve shop short names, optionally qualified by their reported location. */
+export function findTerminalByAlias(name: string, terminals: Terminal[]): Terminal | undefined {
+  const [shop, scope] = name.toLowerCase().split(/\s+(?:in|on|at)\s+/);
+  const shopKey = normalize(shop);
+  if (shopKey.length < 5) return undefined;
+  const scopeKey = scope ? normalize(scope) : undefined;
+  function closeLocation(value: string): boolean {
+    const key = normalize(value);
+    if (key === scopeKey) return true;
+    if (!scopeKey || Math.min(key.length, scopeKey.length) < 5 || Math.abs(key.length - scopeKey.length) > 1) return false;
+    // Allow a single insertion, deletion or substitution in a location qualifier.
+    let a = 0, b = 0, edits = 0;
+    while (a < key.length && b < scopeKey.length) {
+      if (key[a] === scopeKey[b]) { a++; b++; continue; }
+      if (++edits > 1) return false;
+      if (key.length >= scopeKey.length) a++;
+      if (scopeKey.length >= key.length) b++;
+    }
+    return edits + (key.length - a) + (scopeKey.length - b) <= 1;
+  }
+  const matches = terminals.filter(t => {
+    const aliases = [t.name, t.name.split(/\s+-\s+/)[0], t.nickname];
+    if (!aliases.some(alias => alias && normalize(alias) === shopKey)) return false;
+    return !scopeKey || [t.city_name, t.planet_name, t.moon_name, t.space_station_name, t.star_system_name]
+      .some(location => location && closeLocation(location));
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 export function findTerminal(
   name: string,
   terminals: Terminal[]
@@ -173,6 +224,9 @@ export function findTerminal(
   for (const t of terminals) {
     if (normalize(t.name) === key) return t;
   }
+
+  const alias = findTerminalByAlias(name, terminals);
+  if (alias) return alias;
 
   // Contains match (terminal name contains query or query contains terminal name)
   // Require at least 5 chars for substring matching to avoid false positives

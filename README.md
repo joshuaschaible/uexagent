@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Star Citizen Reference Assistant
 
-## Getting Started
+A local Star Citizen reference assistant built with Next.js 16, React 19, TypeScript, and Tailwind CSS. It combines UEX market data with optional OpenAI classification and response generation. One continuous chat is stored in the browser's localStorage. Older conversations remain preserved, but the chat sidebar and fleet controls have been removed.
 
-First, run the development server:
+For mining location lookups, try `Where can I mine Laranite?` or `Which ores are found on Hurston?`. Results use UEX occurrence mappings and support filtering by system, planet, moon, Lagrange region, or point of interest. These records describe general locations; coordinates, abundance, and guaranteed spawns are unavailable. An unlisted location does not establish that an ore is absent. See the archived [Mining Locations](docs/archive/FEATURES-2026-10-01.md#mining-locations) section for more examples and scope.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The assistant supports ship purchase and rental locations, equipment shopping and comparisons, location services, terminal-specific price history, market alerts, and source report dates and patch versions. Try `Where can I buy Lancet MH2?`, `What ships can I buy at New Deal in Lorville?`, or `Where should I sell Laranite?`. Reported prices and stock do not guarantee availability when you arrive. Route planning, projected profit, cargo optimization and fleet recommendations are disabled. Fresh questions stand alone; explicit follow-ups can retain context. Voice remains planned. [API_DATA_AUDIT.md](API_DATA_AUDIT.md) records the source audit.
+
+## Run locally
+
+Use Node 24 LTS (`.nvmrc` pins the tested release). With nvm installed:
+
+```sh
+nvm install
+nvm use
+npm ci
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create `.env.local` from `.env.example` only if you do not already have it, then configure `UEX_API_TOKEN` and optionally `OPENAI_API_KEY`. Without an OpenAI key, keyword parsing and template responses remain available. Keys stay on the server; do not prefix them with `NEXT_PUBLIC_`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Both development and production start commands bind to loopback by default.
 
-## Learn More
+For a production build:
 
-To learn more about Next.js, take a look at the following resources:
+```sh
+npm run build
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Checks and updates
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm audit
+npm outdated
+```
 
-## Deploy on Vercel
+Commit both `package.json` and `package-lock.json` when upgrading. Use `npm ci` for reproducible installs. Shadcn and the application dependencies use current compatible releases. ESLint remains on 9.39.5 because the React, accessibility and import plugins do not yet support ESLint 10. TypeScript remains on 6.0.3 because TypeScript ESLint requires TypeScript below 6.1; its newer major cannot yet be used with this lint setup. Node types target the Node 24 LTS runtime.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See [FEATURES.md](FEATURES.md) for the prioritized roadmap, the [feature archive](docs/archive/FEATURES-2026-10-01.md) for earlier examples, and [SECURITY.md](SECURITY.md) for request limits, deployment requirements, and the outstanding upstream security release.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Crafting and mission references
+
+Blueprint recipes and mission unlock requirements use the public Star Citizen Wiki game-data API (`api.star-citizen.wiki`), separately from the existing MediaWiki page enrichment. These questions do not require UEX to be available:
+
+- “What materials do I need to craft an XL-1 quantum drive?”
+- “How do I unlock the XL-1 blueprint?”
+- “Tell me about the Blackbox Retrieval mission”
+
+Answers preserve SCU versus discrete item quantities, minimum material quality, alternative requirement groups, required standing, immediate mission prerequisites, and the source game patch. Blueprint pool drop chances are not represented as a guarantee of receiving a particular item. Ambiguous item names or mission variants require a more specific selection. Results include source links; missing fields and upstream failures do not generate guessed requirements. Recipes show the base recipe; tier-specific crafting and personalized mission progress are not implemented.

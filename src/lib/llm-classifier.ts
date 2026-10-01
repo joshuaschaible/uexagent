@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { Intent, ParsedQuery } from "./query-parser";
-import { extractModifiers } from "./query-parser";
+import { extractModifiers, isMiningLocationQuery, parseMiningQuery, isEquipmentQuery, parseEquipmentQuery, parseTemporalFilters, extractMiningLocation, explicitCommodityTradeIntent, parseQuery, parseCraftingQuery } from "./query-parser";
 import type { Commodity, StarSystem, Vehicle, Terminal } from "./uex-client";
 import {
   findCommodity,
@@ -37,6 +37,10 @@ type LLMClassification = {
     location?: string | null;
     budget?: number | null;
     category?: string | null;
+    item?: string | null;
+    item2?: string | null;
+    equipment_category?: string | null;
+    equipment_size?: number | null;
   };
   confidence: number;
 };
@@ -54,8 +58,53 @@ const VALID_INTENTS = new Set<string>([
   "terminal_info", "station_info", "city_info", "outpost_info",
   "location_info", "budget_trade", "location_trade", "price_compare",
   "fleet_trade", "refinery_yields", "refinery_method", "fuel_prices",
+  "mining_locations",
+  "equipment_info", "equipment_buy", "equipment_compare", "market_alerts",
   "vehicle_buy", "vehicle_rent", "help", "unknown",
 ]);
+
+const ENTITY_TEXT_FIELDS = [
+  "vehicle", "vehicle2", "star_system", "star_system2", "planet", "moon",
+  "terminal", "location", "category",
+  "item", "item2", "equipment_category",
+] as const;
+const VALID_CATEGORIES = new Set([
+  "Metal", "Mineral", "Agricultural", "Gas", "Drug", "Scrap", "Vice", "Medical",
+  "_illegal", "_raw", "_extractable", "_harvestable",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isEntityName(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 200;
+}
+
+/** Treat model JSON as untrusted input before resolving entities or calculating trades. */
+function isClassification(value: unknown): value is LLMClassification {
+  if (!isRecord(value) || typeof value.intent !== "string" || !VALID_INTENTS.has(value.intent)) return false;
+  if (typeof value.confidence !== "number" || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) return false;
+  if (!isRecord(value.entities)) return false;
+
+  const entities = value.entities;
+  const allowedFields = new Set<string>(["commodity", "budget", "equipment_size", ...ENTITY_TEXT_FIELDS]);
+  if (Object.keys(entities).some((key) => !allowedFields.has(key))) return false;
+  for (const field of ENTITY_TEXT_FIELDS) {
+    if (entities[field] != null && !isEntityName(entities[field])) return false;
+  }
+  if (entities.category != null && !VALID_CATEGORIES.has(entities.category as string)) return false;
+  if (entities.equipment_size != null && (!Number.isInteger(entities.equipment_size) || (entities.equipment_size as number) < 0 || (entities.equipment_size as number) > 9)) return false;
+  const commodity = entities.commodity;
+  if (commodity != null && !isEntityName(commodity)) {
+    if (!Array.isArray(commodity) || commodity.length === 0 || commodity.length > 8 || !commodity.every(isEntityName)) return false;
+  }
+  if (entities.budget != null && (
+    typeof entities.budget !== "number" || !Number.isFinite(entities.budget) ||
+    entities.budget <= 0 || entities.budget > Number.MAX_SAFE_INTEGER
+  )) return false;
+  return true;
+}
 
 // --- Build system prompt ---
 
@@ -71,7 +120,7 @@ function buildSystemPrompt(data: ReferenceData): string {
 
   const systemNames = data.starSystems.map((s) => s.name).join(", ");
 
-  return `You are a Star Citizen trade query classifier. Given a user message, identify the intent and extract entities.
+  return `You are a Star Citizen reference query classifier. Given a user message, identify the requested lookup and extract entities from natural wording.
 
 Return JSON with this exact structure:
 {
@@ -87,7 +136,11 @@ Return JSON with this exact structure:
     "terminal": "<name or null>",
     "location": "<name or null>",
     "budget": <number or null>,
-    "category": "<category or null>"
+    "category": "<category or null>",
+    "item": "<equipment item name or null>",
+    "item2": "<second equipment item name or null>",
+    "equipment_category": "<equipment category or null>",
+    "equipment_size": <integer 0-9 or null>
   },
   "confidence": <0.0-1.0>
 }
@@ -116,6 +169,11 @@ Return JSON with this exact structure:
 - fleet_trade: User has multiple ships and wants trade recommendations for their fleet. Needs: vehicle + vehicle2
 - refinery_yields: User wants refinery yield bonuses for a commodity (where to refine). Optional: commodity, star_system
 - refinery_method: User asks about refining methods (Dinyx Solventation, Ferron Exchange, Cormack, etc.)
+- mining_locations: User asks where a commodity can be mined, which ores occur at a location, or whether an ore is found there. Optional: commodity, location. Examples: "Where can I mine Laranite?", "Which ores are found on Hurston?", "Can I mine Gold on Daymar?". Mining ships, buying/selling ore, mining outposts, and refining use their own intents.
+- equipment_info: User asks about an equipment item's specifications, attributes, or catalogue. Optional: item, equipment_category. Mining laser heads (Lancet MH2, Arbor MH1), mining modules/gadgets, scraper modules (Abrade, Cinch, Trawler), ship components, weapons and armor are equipment, not ships or commodities.
+- equipment_buy: User asks where to purchase equipment or its price. Optional: item, equipment_category, location.
+- equipment_compare: User compares two equipment items. Needs: item, item2. Optional: equipment_category.
+- market_alerts: User asks for current market/price/inventory alerts or anomalies. Optional: commodity, location. This returns observations, not a background notification subscription.
 - fuel_prices: User wants fuel prices (hydrogen or quantum). Optional: star_system, planet
 - vehicle_buy: User wants to buy a ship in-game with aUEC (not pledge store). Optional: vehicle (if no vehicle, list all buyable ships)
 - vehicle_rent: User wants to rent a ship in-game. Optional: vehicle (if no vehicle, list all rentable ships)
@@ -123,11 +181,18 @@ Return JSON with this exact structure:
 - unknown: Cannot determine intent.
 
 ## Important rules
+- Separate an equipment category, size filter, named item, and location. A request for shops stocking a size-two component has equipment_size 2 and item null unless an actual item name is stated. Never use question words or filters as item names.
+- Classify purchase-location questions by meaning, including shops that sell, vendors that carry, or where someone can get an item. A generic list or specifications question is equipment_info.
+- Size can be expressed as size two, size-2, S2, or a size-two slot. Preserve the original item name when identifying actual components.
 - "Crusader" as a ship manufacturer (e.g. "Crusader C2 Hercules") is NOT the planet Crusader
 - "Drake" as a ship manufacturer (e.g. "Drake Caterpillar") is NOT an entity on its own
 - If user mentions a ship by manufacturer + model, extract only the FULL ship name as vehicle
 - For budget queries, extract the numeric amount in aUEC (convert "50k" to 50000)
 - If the user mentions multiple commodities (e.g. "sell Slam and Neon"), return commodity as an array: ["Slam", "Neon"]
+- Mining locations include systems, planets, moons, orbits, asteroid fields, and points of interest. Preserve the exact location name in location even if it is absent from reference data. Do not invent a replacement or drop an unknown location.
+- Preserve exact location names for all queries, including equipment shops and price history. A price history query can specify a terminal, game version, and date range; do not change it to a generic price lookup. Extract equipment categories such as mining lasers, mining modules, mining gadgets, scraper beams, salvage beams, quantum drives, shield generators, power plants, coolers, personal weapons, vehicle weapons, helmets, and armor.
+- Scraper/scrapper/salvage modules (Abrade, Cinch, Trawler) use equipment_category "scraper beams". Explicit "salvage beams" is a different category containing tractor beams; do not treat salvage heads as that category. Salvage ships such as Vulture and Reclaimer remain vehicles. Scrap and RMC (Recycled Material Composite) remain commodities.
+- For mining, extract only entities explicitly present in the current message; the application resolves follow-up context. "Which ores are found on Hurston?" requests all ores there, not a commodity mentioned earlier. A new explicit location replaces previous location constraints.
 - **Follow-ups**: If a previous user message is shown, the current message may be a follow-up. When the current message is vague/short and doesn't mention specific entities, ALWAYS inherit entities from the previous message. Do NOT invent or guess new entities. Examples:
   - Previous: "Where can I sell Iron (Ore)?" + Current: "What gives me the best price?" → intent: sell, commodity: "Iron (Ore)"
   - Previous: "Where can I sell Laranite?" + Current: "What about in Pyro?" → intent: sell, commodity: "Laranite", star_system: "Pyro"
@@ -163,6 +228,56 @@ function resolveEntities(
 ): ParsedQuery {
   const { commodityMap, starSystemMap, terminals, vehicleMap } = data;
   const ent = classification.entities;
+  const explicitlyMentioned = (name?: string | null) => {
+    if (!name) return undefined;
+    const words = ` ${rawMessage.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+    const entity = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return entity && words.includes(` ${entity} `) ? name : undefined;
+  };
+
+  // Location names such as "ArcCorp Mining Area 045" must not turn a named
+  // commodity purchase into equipment shopping, even if the model says so.
+  if (explicitCommodityTradeIntent(rawMessage, commodityMap) || /\b(?:buy\s+and\s+sell|sell\s+and\s+buy)\b/i.test(rawMessage)) {
+    return parseQuery(rawMessage, commodityMap, starSystemMap, terminals, vehicleMap);
+  }
+
+  if (/\b(?:what|which)\s+(?:ships?|vehicles?)\b/i.test(rawMessage) && /\b(?:buy|purchase)\b/i.test(rawMessage) && !isEquipmentQuery(rawMessage)) {
+    return parseQuery(rawMessage, commodityMap, starSystemMap, terminals, vehicleMap);
+  }
+
+  if (classification.intent.startsWith("equipment_") || isEquipmentQuery(rawMessage)) {
+    const parsed = parseEquipmentQuery(rawMessage);
+    const normalizeEntity = (value: string) => value.toLowerCase().replace(/\bxl[ -]?one\b/g, "xl1").replace(/[^a-z0-9]/g, "");
+    const explicit = (name?: string | null) => name && normalizeEntity(rawMessage).includes(normalizeEntity(name)) ? name : undefined;
+    const explicitItem = (name?: string | null) => {
+      const candidate = explicit(name);
+      // Models sometimes label the requested category itself as an item. Apply
+      // the same category cleanup used by the parser before accepting that name.
+      return candidate ? parseEquipmentQuery(candidate).itemName : undefined;
+    };
+    const modelItem = explicitItem(ent.item);
+    const itemName = parsed.equipmentSize !== undefined && !parsed.itemName ? undefined
+      : modelItem || (ent.item == null && ent.equipment_category && !parsed.equipmentCategory ? undefined : parsed.itemName);
+    return {
+      ...parsed,
+      intent: parsed.intent === "equipment_buy" || parsed.intent === "equipment_compare" ? parsed.intent
+        : classification.intent.startsWith("equipment_") ? classification.intent : parsed.intent,
+      itemName,
+      itemName2: explicitItem(ent.item2) || parsed.itemName2,
+      equipmentCategory: parsed.equipmentCategory || ent.equipment_category || undefined,
+      equipmentSize: parsed.equipmentSize ?? ent.equipment_size ?? undefined,
+      locationName: parsed.locationName || explicit(ent.location) || explicit(ent.moon) || explicit(ent.planet) || explicit(ent.terminal) || explicit(ent.star_system),
+    };
+  }
+
+  if (classification.intent === "mining_locations" || isMiningLocationQuery(rawMessage)) {
+    const parsed = parseMiningQuery(rawMessage, commodityMap);
+    // Model output can retain names that the terminal catalogue cannot resolve.
+    // Only accept names actually present in this message, not inherited guesses.
+    const explicitLocation = [ent.location, ent.moon, ent.planet, ent.terminal, ent.star_system]
+      .find((name) => name && rawMessage.toLowerCase().includes(name.toLowerCase()));
+    return { ...parsed, locationName: parsed.locationName || explicitLocation || undefined };
+  }
 
   // Normalize commodity to array and resolve each
   const commodityNames = ent.commodity
@@ -181,23 +296,23 @@ function resolveEntities(
     ? findVehicle(ent.vehicle2, vehicleMap)
     : undefined;
 
-  const starSystem = ent.star_system
+  const starSystem = ent.star_system && explicitlyMentioned(ent.star_system)
     ? findStarSystem(ent.star_system, starSystemMap)
     : undefined;
 
-  const starSystem2 = ent.star_system2
+  const starSystem2 = ent.star_system2 && explicitlyMentioned(ent.star_system2)
     ? findStarSystem(ent.star_system2, starSystemMap)
     : undefined;
 
-  const planet = ent.planet
+  const planet = ent.planet && explicitlyMentioned(ent.planet)
     ? findPlanet(ent.planet, terminals)
     : undefined;
 
-  const moon = ent.moon
+  const moon = ent.moon && explicitlyMentioned(ent.moon)
     ? findMoon(ent.moon, terminals)
     : undefined;
 
-  const terminal = ent.terminal
+  const terminal = ent.terminal && explicitlyMentioned(ent.terminal)
     ? findTerminal(ent.terminal, terminals)
     : undefined;
 
@@ -206,7 +321,7 @@ function resolveEntities(
   let resolvedMoon = moon;
   let resolvedPlanet = planet;
   let resolvedStarSystem = starSystem;
-  if (ent.location && !moon && !planet && !starSystem) {
+  if (ent.location && explicitlyMentioned(ent.location) && !moon && !planet && !starSystem) {
     resolvedMoon = findMoon(ent.location, terminals);
     if (!resolvedMoon) {
       resolvedPlanet = findPlanet(ent.location, terminals);
@@ -227,11 +342,12 @@ function resolveEntities(
     planet: resolvedPlanet,
     moon: resolvedMoon,
     terminal,
-    locationName: ent.location ?? undefined,
+    locationName: ([ent.location, ent.moon, ent.planet, ent.terminal, ent.star_system].find((name) => explicitlyMentioned(name))) ?? undefined,
     budget: ent.budget ?? undefined,
     category: ent.category ?? undefined,
     modifiers: extractModifiers(rawMessage),
     raw: rawMessage,
+    ...parseTemporalFilters(rawMessage),
   };
 }
 
@@ -248,6 +364,20 @@ function hasBuyKeyword(text: string): boolean {
 function postProcess(parsed: ParsedQuery): ParsedQuery {
   let { intent } = parsed;
   const lower = parsed.raw.toLowerCase();
+
+  // Asking which ships a shop sells is ship shopping, even without a model name.
+  if (!parsed.commodity && !isEquipmentQuery(parsed.raw) && /\b(?:ships?|vehicles?)\b/.test(lower) && /\b(?:buy|purchase)\b/.test(lower)) {
+    intent = "vehicle_buy";
+  }
+
+  if (!intent.startsWith("equipment_")) {
+    if (/\b(?:market|trade|price|stock|inventory)\s+(?:alerts?|anomalies|changes|updates)\b|\b(?:alerts?|anomalies)\s+(?:for|on|in|about)\b/i.test(parsed.raw)) intent = "market_alerts";
+    else if (/\b(?:history|historical|trends?)\b|over time/i.test(parsed.raw)) intent = "price_history";
+  }
+  if (["price_history", "market_alerts"].includes(intent)) {
+    const location = extractMiningLocation(parsed.raw);
+    parsed = { ...parsed, locationName: location && location !== parsed.gameVersion ? location.replace(/\s+(?:from|since|after|until|through|before|patch|version)\b.*$/i, "").trim() : parsed.locationName };
+  }
 
   // 2 vehicles + trade-ish intent → fleet_trade
   // But if the user wants to buy/rent the ships themselves (no commodity), keep vehicle_buy/vehicle_rent
@@ -344,16 +474,13 @@ export async function classifyWithLLM(
   referenceData: ReferenceData,
   previousUserMessage?: string
 ): Promise<ParsedQuery | null> {
+  const crafting = parseCraftingQuery(message);
+  if (crafting) return crafting;
   if (!isLLMClassifierAvailable()) return null;
 
-  const startTime = Date.now();
-
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 8000, maxRetries: 0 });
     const systemPrompt = getSystemPrompt(referenceData);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     // Build messages — include previous user message as context for follow-ups
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
@@ -374,31 +501,34 @@ export async function classifyWithLLM(
         response_format: { type: "json_object" },
         temperature: 0.1,
         max_tokens: 300,
-      },
-      { signal: controller.signal }
+      }
     );
 
-    clearTimeout(timeoutId);
-
     const content = completion.choices[0]?.message?.content;
-    if (!content) return null;
+    if (!content || content.length > 10000) return null;
 
-    const classification: LLMClassification = JSON.parse(content);
+    const classification: unknown = JSON.parse(content);
 
-    // Validate intent
-    if (!VALID_INTENTS.has(classification.intent)) {
-      console.warn(`LLM returned invalid intent: ${classification.intent}`);
-      return null;
-    }
+    if (!isClassification(classification)) return null;
 
     // Low confidence → fall back
     if (classification.confidence < 0.5) {
-      console.log(`LLM low confidence (${classification.confidence}) for: "${message}"`);
       return null;
     }
 
     // Resolve entity names to actual objects
-    const parsed = resolveEntities(classification, referenceData, message);
+    let parsed = resolveEntities(classification, referenceData, message);
+    // A bare component name can be mistaken for a ship. Correct that only
+    // when the live catalogue confirms an exact name and no ship was resolved.
+    if (parsed.intent === "vehicle_buy" && !parsed.vehicle && !/\b(?:ships?|vehicles?)\b/i.test(message)) {
+      const equipment = parseEquipmentQuery(message);
+      if (equipment.itemName) {
+        const { getEquipmentSuggestions } = await import("./equipment-client");
+        const compact = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const matches = await getEquipmentSuggestions(equipment.itemName);
+        if (matches.some(item => compact(item.name) === compact(equipment.itemName!))) parsed = equipment;
+      }
+    }
 
     // Apply safety-net heuristics
     const result = postProcess(parsed);
@@ -406,21 +536,10 @@ export async function classifyWithLLM(
     // Success — reset circuit breaker
     consecutiveFailures = 0;
 
-    const elapsed = Date.now() - startTime;
-    console.log(
-      `LLM classified "${message.substring(0, 50)}..." → ${result.intent} (${classification.confidence}, ${elapsed}ms)`
-    );
-
     return result;
-  } catch (error) {
+  } catch {
     consecutiveFailures++;
-    const elapsed = Date.now() - startTime;
-
-    if (error instanceof Error && error.name === "AbortError") {
-      console.warn(`LLM classifier timed out after ${elapsed}ms} (failure ${consecutiveFailures}/${MAX_FAILURES})`);
-    } else {
-      console.warn(`LLM classifier error (failure ${consecutiveFailures}/${MAX_FAILURES}):`, (error as Error).message || error);
-    }
+    console.warn(`LLM classifier unavailable (failure ${consecutiveFailures}/${MAX_FAILURES})`);
 
     // Trip circuit breaker after repeated failures
     if (consecutiveFailures >= MAX_FAILURES) {

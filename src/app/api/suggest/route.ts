@@ -1,12 +1,26 @@
 import { NextResponse } from "next/server";
 import { getReferenceData } from "@/lib/data/cache";
+import { assertTrustedHost, MAX_NAME_LENGTH, RequestError, requestErrorResponse } from "@/lib/request-security";
 
 export type Suggestion = {
   name: string;
-  type: "commodity" | "ship" | "system" | "planet" | "moon" | "station";
+  type: "commodity" | "ship" | "system" | "planet" | "moon" | "station" | "orbit" | "poi" | "item";
 };
 
 export async function GET(request: Request) {
+  try {
+    assertTrustedHost(request);
+    const q = new URL(request.url).searchParams.get("q");
+    if (q && q.length > MAX_NAME_LENGTH) {
+      throw new RequestError(400, "The search query is too long.");
+    }
+    return await getSuggestions(request);
+  } catch (error) {
+    return requestErrorResponse(error);
+  }
+}
+
+async function getSuggestions(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.toLowerCase().trim();
   const typed = searchParams.get("typed") === "1";
@@ -19,11 +33,25 @@ export async function GET(request: Request) {
     await getReferenceData();
 
   const MAX = 8;
+  const additional: Suggestion[] = [];
+  if (q.length >= 2 || q === "*") {
+    const [geographyResult, equipmentResult] = await Promise.allSettled([
+      q === "*" ? Promise.resolve(null) : import("@/lib/data/mining").then(({ getMiningData }) => getMiningData()),
+      import("@/lib/equipment-client").then(({ getEquipmentSuggestions }) => getEquipmentSuggestions(q === "*" ? "" : q)),
+    ]);
+    if (geographyResult.status === "fulfilled" && geographyResult.value) {
+      const geography = geographyResult.value;
+      for (const [rows, type] of [[geography.planets, "planet"], [geography.moons, "moon"], [geography.orbits, "orbit"], [geography.pointsOfInterest, "poi"]] as const) {
+        for (const row of rows) if (row.name.toLowerCase().includes(q)) additional.push({ name: row.name, type });
+      }
+    }
+    if (equipmentResult.status === "fulfilled") additional.push(...equipmentResult.value.map((item) => ({ name: item.name, type: "item" as const })));
+  }
 
   if (typed) {
     // Return ALL matching suggestions for @ mentions, sorted by relevance
     const showAll = q.length < 2;
-    const results: Suggestion[] = [];
+    const results: Suggestion[] = [...additional];
 
     for (const c of commodities) {
       if (c.is_available && (showAll || c.name.toLowerCase().includes(q))) {
@@ -87,11 +115,11 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json(results);
+    return NextResponse.json([...new Map(results.map((result) => [`${result.type}:${result.name.toLowerCase()}`, result])).values()]);
   }
 
   // Plain string results (legacy typeahead)
-  const plainResults: { name: string }[] = [];
+  const plainResults: { name: string }[] = additional.map(({ name }) => ({ name }));
 
   for (const c of commodities) {
     if (c.is_available && c.name.toLowerCase().includes(q)) {

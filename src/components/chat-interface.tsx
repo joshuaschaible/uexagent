@@ -1,33 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Menu, RefreshCw, AtSign } from "lucide-react";
-import { ShipSelector } from "@/components/ship-selector";
-import { FleetSettings } from "@/components/fleet-settings";
-import {
-  loadFleet,
-  saveFleet,
-  loadActiveShipId,
-  saveActiveShipId,
-  type FleetShip,
-} from "@/lib/fleet-store";
+import { Send, RefreshCw, AtSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { ChatMessage } from "@/components/chat-message";
-import { ChatSidebar } from "@/components/chat-sidebar";
 import { Typeahead } from "@/components/typeahead";
 import { MentionBackdrop } from "@/components/mention-backdrop";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Message, Conversation } from "@/lib/types";
 import {
-  loadConversations,
-  saveConversation,
-  deleteConversation as deleteConv,
+  loadReferenceChat,
+  saveReferenceChat,
   createConversation,
   createMessage,
   titleFromMessage,
@@ -35,28 +18,32 @@ import {
 
 const EXAMPLE_SECTIONS = [
   {
-    label: "🔄 Trading",
+    label: "🔧 Crafting & Missions",
+    questions: ["What materials do I need to craft an XL-1 quantum drive?", "How do I unlock the XL-1 blueprint?", "Tell me about the Blackbox Retrieval mission"],
+  },
+  {
+    label: "📍 Shops & Prices",
     questions: [
       "Where's the best place to sell Laranite?",
-      "I have 50k aUEC, what should I trade?",
-      "What's the most profitable trade route right now?",
-      "Where can I buy Quantainium near Hurston?",
+      "What ships can I buy at New Deal in Lorville?",
+      "Where can I buy Abrade Scraper Module?",
+      "Where can I buy Quantanium near Hurston?",
     ],
   },
   {
-    label: "📊 Market & Refining",
+    label: "📊 Market, Mining & Refining",
     questions: [
-      "What's the most profitable commodity?",
-      "Compare Laranite prices in Stanton vs Pyro",
-      "Where should I refine Quantainium?",
-      "What are the cheapest fuel prices in Stanton?",
+      "Where can I mine Laranite?",
+      "Price history of Laranite",
+      "Latest market alerts in Stanton",
+      "Where should I refine Quantanium?",
     ],
   },
   {
-    label: "🚀 Ships & Locations",
+    label: "🚀 Ships, Equipment & Locations",
     questions: [
       "Where can I buy the Caterpillar in-game?",
-      "What ships can I rent?",
+      "Show mining lasers",
       "Tell me about the C2 Hercules",
       "What space stations have a refinery?",
     ],
@@ -64,38 +51,37 @@ const EXAMPLE_SECTIONS = [
 ];
 
 export function ChatInterface() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHints, setShowHints] = useState(true);
   const [typeaheadVisible, setTypeaheadVisible] = useState(false);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mentions, setMentions] = useState<{ value: string; type: string }[]>([]);
-  const [fleet, setFleet] = useState<FleetShip[]>([]);
-  const [activeShipId, setActiveShipId] = useState<number | null>(null);
-  const [fleetSettingsOpen, setFleetSettingsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
 
   const messages = activeConv?.messages ?? [];
 
-  // Load conversations and fleet on mount
-  useEffect(() => {
-    const saved = loadConversations();
-    setConversations(saved);
-    if (saved.length > 0) {
-      setActiveConv(saved[0]);
-    } else {
-      const newConv = createConversation();
-      setActiveConv(newConv);
+  function cancelPendingBlur() {
+    if (blurTimerRef.current !== null) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
     }
-    setFleet(loadFleet());
-    setActiveShipId(loadActiveShipId());
+  }
+
+  useEffect(() => () => {
+    if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current);
+  }, []);
+
+  // Resume one continuous chat; older conversations remain in local storage.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setActiveConv(loadReferenceChat() ?? createConversation()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Fetch cache age periodically
@@ -138,40 +124,12 @@ export function ChatInterface() {
     }
   }, [input]);
 
-  const persistConversation = useCallback(
-    (conv: Conversation) => {
-      saveConversation(conv);
-      setConversations((prev) => {
-        const filtered = prev.filter((c) => c.id !== conv.id);
-        return [conv, ...filtered];
-      });
-    },
-    []
-  );
+  const persistConversation = useCallback((conv: Conversation) => {
+    saveReferenceChat(conv);
+  }, []);
 
-  function handleAddShip(ship: FleetShip) {
-    const updated = [...fleet.filter((s) => s.id !== ship.id), ship];
-    setFleet(updated);
-    saveFleet(updated);
-  }
-
-  function handleRemoveShip(id: number) {
-    const updated = fleet.filter((s) => s.id !== id);
-    setFleet(updated);
-    saveFleet(updated);
-    if (activeShipId === id) {
-      setActiveShipId(null);
-      saveActiveShipId(null);
-    }
-  }
-
-  function handleSelectShip(id: number | null) {
-    setActiveShipId(id);
-    saveActiveShipId(id);
-  }
-
-  async function sendMessage(text: string) {
-    if (!text.trim() || loading || !activeConv) return;
+  const sendMessage = useCallback(async (text: string, baseConversation = activeConv) => {
+    if (!text.trim() || loading || !baseConversation) return;
 
     setShowHints(false);
     const userMsg = createMessage("user", text.trim());
@@ -180,12 +138,12 @@ export function ChatInterface() {
     messageHistoryRef.current.push(text.trim());
     historyIndexRef.current = -1;
 
-    const updatedMessages = [...activeConv.messages, userMsg];
-    const isFirst = activeConv.messages.length === 0;
+    const updatedMessages = [...baseConversation.messages, userMsg];
+    const isFirst = baseConversation.messages.length === 0;
     const updatedConv: Conversation = {
-      ...activeConv,
+      ...baseConversation,
       messages: updatedMessages,
-      title: isFirst ? titleFromMessage(text.trim()) : activeConv.title,
+      title: isFirst ? titleFromMessage(text.trim()) : baseConversation.title,
       updatedAt: Date.now(),
     };
 
@@ -196,6 +154,7 @@ export function ChatInterface() {
     // Keep focus on input immediately
     requestAnimationFrame(() => inputRef.current?.focus());
 
+    let errorText = "Failed to connect. Please check your connection and try again.";
     try {
       // Send with history for context
       const history = updatedMessages.slice(-6).map((m) => ({
@@ -215,28 +174,28 @@ export function ChatInterface() {
       };
       setActiveConv(streamingConv);
 
-      const activeShip = activeShipId
-        ? fleet.find((s) => s.id === activeShipId)
-        : undefined;
-
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text.trim(),
           history,
-          ...(activeShip && {
-            activeShip: {
-              name: activeShip.name,
-              name_full: activeShip.name_full,
-              scu: activeShip.scu,
-              pad_type: activeShip.pad_type,
-            },
-          }),
         }),
       });
 
-      if (!res.ok || !res.body) throw new Error("Stream failed");
+      if (!res.ok) {
+        try {
+          const error: unknown = await res.json();
+          if (error && typeof error === "object" && "text" in error && typeof error.text === "string") {
+            // ChatMessage renders this as escaped React text; keep server errors brief.
+            errorText = error.text.trim().slice(0, 500) || errorText;
+          }
+        } catch {
+          // Proxies and network failures may return an HTML page or an empty body.
+        }
+        throw new Error("Chat request rejected");
+      }
+      if (!res.body) throw new Error("Stream failed");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -335,7 +294,7 @@ export function ChatInterface() {
     } catch {
       const errorMsg = createMessage(
         "bot",
-        "Failed to connect. Please check your connection and try again.",
+        errorText,
         { isError: true }
       );
       const finalConv: Conversation = {
@@ -349,7 +308,7 @@ export function ChatInterface() {
       setLoading(false);
       inputRef.current?.focus();
     }
-  }
+  }, [activeConv, loading, persistConversation]);
 
   function handleRetry(messageText: string) {
     if (!activeConv || loading) return;
@@ -362,40 +321,7 @@ export function ChatInterface() {
       messages: withoutPair,
       updatedAt: Date.now(),
     };
-    setActiveConv(restoredConv);
-    // Re-send the message
-    setTimeout(() => sendMessage(messageText), 50);
-  }
-
-  function handleNewChat() {
-    const newConv = createConversation();
-    setActiveConv(newConv);
-    setSidebarOpen(false);
-    setShowHints(true);
-    setMentions([]);
-    inputRef.current?.focus();
-  }
-
-  function handleSelectConversation(id: string) {
-    const conv = conversations.find((c) => c.id === id);
-    if (conv) {
-      setActiveConv(conv);
-      setSidebarOpen(false);
-      setShowHints(false);
-    }
-  }
-
-  function handleDeleteConversation(id: string) {
-    deleteConv(id);
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (activeConv?.id === id) {
-      const remaining = conversations.filter((c) => c.id !== id);
-      if (remaining.length > 0) {
-        setActiveConv(remaining[0]);
-      } else {
-        handleNewChat();
-      }
-    }
+    void sendMessage(messageText, restoredConv);
   }
 
   function handleTypeaheadSelect(value: string, isMention: boolean, type?: string) {
@@ -472,42 +398,13 @@ export function ChatInterface() {
     return undefined;
   }
 
-  const sidebarContent = (
-    <ChatSidebar
-      conversations={conversations}
-      activeId={activeConv?.id ?? null}
-      onSelect={handleSelectConversation}
-      onNew={handleNewChat}
-      onDelete={handleDeleteConversation}
-      onOpenFleetSettings={() => {
-        setSidebarOpen(false);
-        setFleetSettingsOpen(true);
-      }}
-    />
-  );
-
   return (
     <div className="flex h-screen bg-background">
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex md:w-64 md:flex-col border-r border-border/50">
-        {sidebarContent}
-      </div>
-
       {/* Main content */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
         <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border/50">
           <div className="flex items-center gap-3">
-            {/* Mobile sidebar trigger */}
-            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetTrigger className="md:hidden inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent cursor-pointer">
-                <Menu className="h-5 w-5" />
-              </SheetTrigger>
-              <SheetContent side="left" showCloseButton={false}>
-                <SheetTitle className="sr-only">Chat History</SheetTitle>
-                {sidebarContent}
-              </SheetContent>
-            </Sheet>
             <div>
               <h1 className="text-base font-semibold">UEX Agent</h1>
             </div>
@@ -517,7 +414,7 @@ export function ChatInterface() {
               <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                 <span>
-                  Updated{" "}
+                  Reference cache loaded{" "}
                   {cacheAge < 60000
                     ? "just now"
                     : `${Math.floor(cacheAge / 60000)}m ago`}
@@ -539,17 +436,17 @@ export function ChatInterface() {
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 py-6">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto [mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]">
+          <div className="max-w-3xl mx-auto px-4 pt-4 pb-10">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
                 <div className="text-center">
                   <h2 className="text-2xl font-semibold mb-2">
-                    Star Citizen Trade Bot
+                    Star Citizen Reference
                   </h2>
                   <p className="text-muted-foreground text-sm max-w-md">
-                    Powered by UEX Corp data. Ask me anything about commodity
-                    trading, ship cargo, stations, and more.
+                    Quick answers about mining, ships, equipment, locations,
+                    and reported prices. Powered by UEX Corp data.
                   </p>
                 </div>
                 <div className="w-full max-w-xl space-y-4">
@@ -582,9 +479,7 @@ export function ChatInterface() {
                 table={msg.table}
                 tables={msg.tables}
                 chart={msg.chart}
-                map={msg.map}
                 image={msg.image}
-                profit={msg.profit}
                 isError={msg.isError}
                 isLLM={msg.isLLM}
                 isStreaming={msg.isStreaming}
@@ -610,7 +505,7 @@ export function ChatInterface() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-border/50 bg-background">
+        <div className="bg-background">
           <form
             onSubmit={handleSubmit}
             className="max-w-3xl mx-auto px-4 py-4"
@@ -627,6 +522,7 @@ export function ChatInterface() {
                 <textarea
                   ref={inputRef}
                   value={input}
+                  maxLength={8000}
                   onChange={(e) => {
                     const val = e.target.value;
                     setInput(val);
@@ -635,12 +531,20 @@ export function ChatInterface() {
                     setTypeaheadVisible(val.length >= 2 || hasMention);
                   }}
                   onKeyDown={handleKeyDown}
-                  onFocus={() => {
-                    const hasMention = /(?:^|\s)@/.test(input);
-                    setTypeaheadVisible(input.length >= 2 || hasMention);
+                  onFocus={(e) => {
+                    cancelPendingBlur();
+                    const val = e.currentTarget.value;
+                    const hasMention = /(?:^|\s)@/.test(val);
+                    setTypeaheadVisible(val.length >= 2 || hasMention);
                   }}
-                  onBlur={() => setTimeout(() => setTypeaheadVisible(false), 200)}
-                  placeholder="Ask about commodity prices, trade routes..."
+                  onBlur={() => {
+                    cancelPendingBlur();
+                    blurTimerRef.current = setTimeout(() => {
+                      setTypeaheadVisible(false);
+                      blurTimerRef.current = null;
+                    }, 200);
+                  }}
+                  placeholder="Ask about mining, ships, equipment, or prices..."
                   rows={1}
                   className="relative z-10 w-full bg-transparent text-sm resize-none outline-none placeholder:text-muted-foreground/60 max-h-[120px] text-transparent caret-foreground"
                 />
@@ -651,28 +555,29 @@ export function ChatInterface() {
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label="Mention an item or location"
                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       if (inputRef.current) {
                         const pos = inputRef.current.selectionStart ?? input.length;
                         const before = input.slice(0, pos);
-                        const after = input.slice(pos);
+                        const after = input.slice(inputRef.current.selectionEnd ?? pos);
                         const needsSpace = before.length > 0 && !before.endsWith(" ") && !before.endsWith("\n");
                         const newVal = before + (needsSpace ? " @" : "@") + after;
-                        setInput(newVal);
-                        setTypeaheadVisible(true);
+                        // Focus before opening so the focus handler cannot overwrite it.
                         inputRef.current.focus();
+                        cancelPendingBlur();
+                        setInput(newVal);
+                        setMentions((prev) => prev.filter((m) => newVal.includes(m.value)));
+                        setTypeaheadVisible(true);
+                        const caret = before.length + (needsSpace ? 2 : 1);
+                        requestAnimationFrame(() => inputRef.current?.setSelectionRange(caret, caret));
                       }
                     }}
                   >
                     <AtSign className="h-4 w-4" strokeWidth={3} />
                   </Button>
-                  <ShipSelector
-                    fleet={fleet}
-                    activeShipId={activeShipId}
-                    onSelectShip={handleSelectShip}
-                    onOpenFleetSettings={() => setFleetSettingsOpen(true)}
-                  />
                 </div>
                 <Button
                   type="submit"
@@ -694,14 +599,6 @@ export function ChatInterface() {
         </div>
       </div>
 
-      {/* Fleet settings sheet */}
-      <FleetSettings
-        open={fleetSettingsOpen}
-        onOpenChange={setFleetSettingsOpen}
-        fleet={fleet}
-        onAddShip={handleAddShip}
-        onRemoveShip={handleRemoveShip}
-      />
     </div>
   );
 }

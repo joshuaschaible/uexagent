@@ -1,10 +1,9 @@
 import type { ParsedQuery } from "@/lib/query-parser";
 import type { ChatResponse } from "@/lib/types";
 import {
-  getCommodityPrices,
-  getCommodityPricesAll,
+  getCommodityPrices as fetchUexCommodityPrices,
+  getGameVersions,
   getCommodityRoutes,
-  getCommodityAverages,
   getCommodityRawPrices,
   getSpaceStations,
   getCities,
@@ -20,6 +19,15 @@ import {
 } from "@/lib/uex-client";
 import { getReferenceData, findMoon, findPlanet, findStarSystem } from "@/lib/data/cache";
 import { planMultiHopRoute } from "@/lib/route-planner";
+import { getTradePrices, enrichPriceSummaries, isBuyable, isSellable, getCargoConstraint } from "@/lib/trade-data";
+import { findTradeOpportunities, TRADE_ESTIMATE_NOTE, type TradeOpportunity } from "@/lib/trade-recommendations";
+import { formatCrew, compareCrew, cargoHandlingNotes, shipLogistics } from "@/lib/vehicle-details";
+import { summarizeDataFreshness, formatReportTimestamp, type ReportMetadata } from "@/lib/data-freshness";
+import { buildPriceHistoryAnswer, buildMarketAlertsAnswer } from "@/lib/market-answer";
+import { buildEquipmentAnswer } from "@/lib/equipment-answer";
+import { buildExtendedLocationAnswer } from "@/lib/location-answer";
+import { buildCraftingAnswer } from "@/lib/crafting-answer";
+import { buildMiningAnswer } from "@/lib/mining-answer";
 import { generateResponseText, type DataContext } from "@/lib/response-generator";
 import {
   getShipWikiData,
@@ -34,22 +42,12 @@ import {
 type HandlerResult = ChatResponse & {
   dataContext?: DataContext;
   fallbackText: string;
+  sourceRows?: ReportMetadata[];
+  notes?: string[];
 };
 
 function formatPrice(price: number): string {
   return price.toLocaleString("en-US", { maximumFractionDigits: 0 });
-}
-
-/** Check if a price record has active sell data.
- *  The raw prices endpoint omits status_sell — treat undefined as valid. */
-function isSellable(p: CommodityPrice): boolean {
-  return p.price_sell > 0 && (p.status_sell === undefined || p.status_sell > 0);
-}
-
-/** Check if a price record has active buy data.
- *  The raw prices endpoint omits status_buy — treat undefined as valid. */
-function isBuyable(p: CommodityPrice): boolean {
-  return p.price_buy > 0 && (p.status_buy === undefined || p.status_buy > 0);
 }
 
 /** Wrap a commodity name with a UEX link marker for rendering */
@@ -59,7 +57,7 @@ function uexLink(name: string): string {
 }
 
 /** Filter any location-bearing records by star system, planet, and/or moon */
-function filterByLocation<T extends { star_system_name?: string; planet_name?: string | null; id_moon?: number }>(
+function filterByLocation<T extends { star_system_name?: string; planet_name?: string | null; id_moon?: number; id_orbit?: number; id_poi?: number; id_city?: number; id_space_station?: number; space_station_name?: string | null }>(
   items: T[],
   query: ParsedQuery
 ): T[] {
@@ -79,12 +77,16 @@ function filterByLocation<T extends { star_system_name?: string; planet_name?: s
   if (query.moon) {
     filtered = filtered.filter((p) => p.id_moon === query.moon!.moonId);
   }
+  if (query.orbit) filtered = filtered.filter((p) => p.id_orbit === query.orbit!.orbitId);
+  if (query.poi) filtered = filtered.filter((p) => p.id_poi === query.poi!.poiId);
+  if (query.city) filtered = filtered.filter((p) => p.id_city === query.city!.cityId);
+  if (query.station) filtered = filtered.filter((p) => p.id_space_station === query.station!.stationId || p.space_station_name?.toLowerCase() === query.station!.stationName.toLowerCase());
   return filtered;
 }
 
 /** Format SCU stock, returning fallback when unavailable */
-function formatStock(scu: number | undefined, fallback = "Unknown"): string {
-  return (scu ?? 0) > 0 ? `${scu} SCU` : fallback;
+function formatStock(scu: number | undefined | null, fallback = "Unknown"): string {
+  return typeof scu === "number" && Number.isFinite(scu) && scu >= 0 ? `${scu} SCU` : fallback;
 }
 
 /** Get display name for a vehicle (prefer full name) */
@@ -94,6 +96,11 @@ function vehicleDisplayName(v: Vehicle): string {
 
 /** Build a human-readable location label from query context */
 function locationLabel(query: ParsedQuery): string {
+  if (query.terminal) return ` at ${query.terminal.name}`;
+  if (query.city) return ` at ${query.city.cityName}`;
+  if (query.station) return ` at ${query.station.stationName}`;
+  if (query.poi) return ` at ${query.poi.poiName}`;
+  if (query.orbit) return ` near ${query.orbit.orbitName}`;
   if (query.moon) return ` on ${query.moon.moonName}`;
   if (query.planet && query.starSystem) return ` on ${query.planet.planetName} in ${query.starSystem.name}`;
   if (query.planet) return ` on ${query.planet.planetName}`;
@@ -114,6 +121,12 @@ function getVehicleRoles(v: Vehicle): string[] {
   if (v.is_repair) roles.push("Repair");
   if (v.is_stealth) roles.push("Stealth");
   return roles;
+}
+
+/** Detailed reports also need terminal-only availability flags and station IDs. */
+async function getCommodityPrices(params: Parameters<typeof fetchUexCommodityPrices>[0]): Promise<CommodityPrice[]> {
+  const [prices, reference] = await Promise.all([fetchUexCommodityPrices(params), getReferenceData()]);
+  return enrichPriceSummaries(prices, reference.terminals);
 }
 
 /** Fetch prices for a raw commodity from both endpoints, deduplicating by terminal */
@@ -141,7 +154,8 @@ async function fetchRawCommodityPrices(
       if (newHasSell && !existHasSell) byTerminal.set(p.terminal_name, p);
     }
   }
-  return [...byTerminal.values()];
+  const { terminals } = await getReferenceData();
+  return enrichPriceSummaries([...byTerminal.values()], terminals);
 }
 
 /** Fetch prices for a single commodity (raw-aware) */
@@ -183,15 +197,19 @@ async function handleSell(query: ParsedQuery): Promise<HandlerResult> {
         fallbackText,
         dataContext: {
           intent: "sell_terminal_check",
-          dataDescription: `Yes, ${query.terminal.name} buys ${query.commodity.name} at ${formatPrice(match.price_sell)} aUEC/SCU. Demand: ${formatStock(match.scu_sell_stock)}. A single-row table with details is shown separately.`,
+          dataDescription: `Yes, ${query.terminal.name} buys ${query.commodity.name} at ${formatPrice(match.price_sell)} aUEC/SCU. Demand: ${formatStock(match.scu_sell)}. A single-row table with details is shown separately.`,
         },
+        sourceRows: [match],
         table: {
-          headers: ["Terminal", "Commodity", "Sell Price (aUEC/SCU)", "Demand"],
+          headers: ["Terminal", "Commodity", "Sell Price (aUEC/SCU)", "Forecast Demand", "Terminal Inventory", "Reported (UTC)", "Patch"],
           rows: [[
             query.terminal.name,
             query.commodity.name,
             formatPrice(match.price_sell),
+            formatStock(match.scu_sell),
             formatStock(match.scu_sell_stock),
+            formatReportTimestamp(match.date_modified ?? match.date_added),
+            match.game_version || "Unknown",
           ]],
         },
       };
@@ -276,12 +294,15 @@ async function handleSell(query: ParsedQuery): Promise<HandlerResult> {
       if (sellable.length > 0) {
         tables.push({
           title: `Sell ${c.name} (${sellable.length})`,
-          headers: ["Terminal", "Location", "Sell Price (aUEC/SCU)", "Stock Demand"],
+          headers: ["Terminal", "Location", "Sell Price (aUEC/SCU)", "Forecast Demand", "Terminal Inventory", "Reported (UTC)", "Patch"],
           rows: sellable.map((p) => [
             p.terminal_name,
             [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
             formatPrice(p.price_sell),
+            formatStock(p.scu_sell),
             formatStock(p.scu_sell_stock),
+            formatReportTimestamp(p.date_modified ?? p.date_added),
+            p.game_version || "Unknown",
           ]),
         });
         summaryParts.push(`${sellable.length} locations buying ${c.name} (best: ${formatPrice(sellable[0].price_sell)} aUEC/SCU at ${sellable[0].terminal_name})`);
@@ -335,17 +356,21 @@ async function handleSell(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: shown,
     dataContext: {
       intent: "sell",
       dataDescription: `Found ${sellable.length} locations buying ${query.commodity.name}${loc}. Best price: ${formatPrice(sellable[0].price_sell)} aUEC/SCU at ${sellable[0].terminal_name}. Lowest price: ${formatPrice(sellable[sellable.length - 1].price_sell)} aUEC/SCU.${hasBestModifier ? ` Showing top ${shown.length}.` : ""} A table with all locations and prices is shown separately.`,
     },
     table: {
-      headers: ["Terminal", "Location", "Sell Price (aUEC/SCU)", "Stock Demand"],
+      headers: ["Terminal", "Location", "Sell Price (aUEC/SCU)", "Forecast Demand", "Terminal Inventory", "Reported (UTC)", "Patch"],
       rows: shown.map((p) => [
         p.terminal_name,
         [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
         formatPrice(p.price_sell),
+        formatStock(p.scu_sell),
         formatStock(p.scu_sell_stock),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     },
   };
@@ -373,13 +398,16 @@ async function handleBuy(query: ParsedQuery): Promise<HandlerResult> {
           intent: "buy_terminal_check",
           dataDescription: `Yes, ${query.terminal.name} sells ${query.commodity.name} at ${formatPrice(match.price_buy)} aUEC/SCU. Available stock: ${formatStock(match.scu_buy)}. A single-row table with details is shown separately.`,
         },
+        sourceRows: [match],
         table: {
-          headers: ["Terminal", "Commodity", "Buy Price (aUEC/SCU)", "Available SCU"],
+          headers: ["Terminal", "Commodity", "Buy Price (aUEC/SCU)", "Available SCU", "Reported (UTC)", "Patch"],
           rows: [[
             query.terminal.name,
             query.commodity.name,
             formatPrice(match.price_buy),
             formatStock(match.scu_buy),
+            formatReportTimestamp(match.date_modified ?? match.date_added),
+            match.game_version || "Unknown",
           ]],
         },
       };
@@ -468,12 +496,14 @@ async function handleBuy(query: ParsedQuery): Promise<HandlerResult> {
       if (buyable.length > 0) {
         tables.push({
           title: `Buy ${c.name} (${buyable.length})`,
-          headers: ["Terminal", "Location", "Buy Price (aUEC/SCU)", "Available SCU"],
+          headers: ["Terminal", "Location", "Buy Price (aUEC/SCU)", "Available SCU", "Reported (UTC)", "Patch"],
           rows: buyable.map((p) => [
             p.terminal_name,
             [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
             formatPrice(p.price_buy),
             formatStock(p.scu_buy),
+            formatReportTimestamp(p.date_modified ?? p.date_added),
+            p.game_version || "Unknown",
           ]),
         });
         summaryParts.push(`${buyable.length} locations selling ${c.name} (cheapest: ${formatPrice(buyable[0].price_buy)} aUEC/SCU at ${buyable[0].terminal_name})`);
@@ -528,17 +558,20 @@ async function handleBuy(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: shown,
     dataContext: {
       intent: "buy",
       dataDescription: `Found ${buyable.length} locations selling ${query.commodity.name}${loc}. Cheapest: ${formatPrice(buyable[0].price_buy)} aUEC/SCU at ${buyable[0].terminal_name}. Most expensive: ${formatPrice(buyable[buyable.length - 1].price_buy)} aUEC/SCU.${hasBestModifier ? ` Showing top ${shown.length}.` : ""} A table with all locations and prices is shown separately.`,
     },
     table: {
-      headers: ["Terminal", "Location", "Buy Price (aUEC/SCU)", "Available SCU"],
+      headers: ["Terminal", "Location", "Buy Price (aUEC/SCU)", "Available SCU", "Reported (UTC)", "Patch"],
       rows: shown.map((p) => [
         p.terminal_name,
         [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
         formatPrice(p.price_buy),
         formatStock(p.scu_buy),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     },
   };
@@ -546,78 +579,50 @@ async function handleBuy(query: ParsedQuery): Promise<HandlerResult> {
 
 async function handleTradeRoute(query: ParsedQuery): Promise<HandlerResult> {
   const params: Record<string, number> = {};
-
-  if (query.commodity) {
-    params.id_commodity = query.commodity.id;
+  if (query.commodity) params.id_commodity = query.commodity.id;
+  if (query.planet) params.id_planet_origin = query.planet.planetId;
+  if (query.terminal) params.id_terminal_origin = query.terminal.id;
+  if (query.orbit) params.id_orbit_origin = query.orbit.orbitId;
+  if (!Object.keys(params).length) {
+    const [prices, reference] = await Promise.all([getTradePrices(), getReferenceData()]);
+    const capacity = query.vehicle?.scu ?? 96;
+    const trades = findTradeOpportunities(filterByLocation(prices, query), reference.terminals, capacity, query.budget, query.vehicle).slice(0, 8);
+    const text = trades.length ? `**Trade routes for ${query.vehicle?.name || `${capacity} SCU cargo`}**${locationLabel(query)}, ranked by estimated gross profit. ${TRADE_ESTIMATE_NOTE}` : "No available profitable trade routes match those locations and ship constraints.";
+    return { text, fallbackText: text, sourceRows: trades.flatMap(t => [t.buy, t.sell]), table: tradeTable(trades) };
   }
-  if (query.planet) {
-    params.id_planet_origin = query.planet.planetId;
-  }
-
-  if (Object.keys(params).length === 0) {
-    const text = 'I need more info to find trade routes. Try: "Best trade route for Laranite" or "Best trade route from Hurston"';
+  const [routes, { terminals }] = await Promise.all([getCommodityRoutes(params), getReferenceData()]);
+  const byId = new Map(terminals.map(t => [t.id, t]));
+  const available = routes.filter(r => {
+    const origin = byId.get(r.id_terminal_origin), destination = byId.get(r.id_terminal_destination);
+    if (r.price_origin <= 0 || r.price_destination <= r.price_origin || r.id_terminal_origin === r.id_terminal_destination) return false;
+    if (!isBuyable({price_buy:r.price_origin,status_buy:r.status_origin ?? undefined}) || !isSellable({price_sell:r.price_destination,status_sell:r.status_destination ?? undefined})) return false;
+    if (getCargoConstraint(query.vehicle, origin) || getCargoConstraint(query.vehicle, destination)) return false;
+    if (query.terminal && r.id_terminal_origin !== query.terminal.id) return false;
+    if (query.starSystem && (r.id_star_system_origin !== query.starSystem.id || r.id_star_system_destination !== query.starSystem.id)) return false;
+    if (query.planet && origin?.id_planet !== query.planet.planetId) return false;
+    if (query.moon && origin?.id_moon !== query.moon.moonId) return false;
+    if (query.orbit && origin?.id_orbit !== query.orbit.orbitId) return false;
+    if (query.poi && origin?.id_poi !== query.poi.poiId) return false;
+    if (query.city && origin?.id_city !== query.city.cityId) return false;
+    if (query.station && origin?.id_space_station !== query.station.stationId) return false;
+    return [origin, destination].every(t => t?.is_available !== 0 && t?.is_available_live !== 0 && t?.is_visible !== 0);
+  }).sort((a, b) => (b.price_destination - b.price_origin) - (a.price_destination - a.price_origin)).slice(0, 8);
+  if (!available.length) {
+    const text = "No available profitable routes match those commodity, location, and ship constraints.";
     return { text, fallbackText: text };
   }
-
-  try {
-    const routes = await getCommodityRoutes(params);
-    const sorted = routes.sort((a, b) => (b.score || 0) - (a.score || 0));
-    const top = sorted.slice(0, 5);
-
-    if (top.length === 0) {
-      const text = "No trade routes found for those criteria. Try different commodities or locations.";
-      return { text, fallbackText: text };
-    }
-
-    const systemName = top[0].origin_star_system_name || "Stanton";
-    const mapRoutes = top.map((r) => ({
-      from: r.origin_terminal_name || `Terminal #${r.id_terminal_origin}`,
-      to: r.destination_terminal_name || `Terminal #${r.id_terminal_destination}`,
-      profit: r.price_margin,
-      commodity: r.commodity_name,
-    }));
-    const highlights = [
-      ...new Set(
-        top.flatMap((r) => [
-          r.origin_terminal_name,
-          r.destination_terminal_name,
-        ]).filter(Boolean)
-      ),
-    ];
-
-    const bestRoute = top[0];
-    const fallbackText = query.commodity
-      ? `Here are the **best trade routes for ${query.commodity.name}**:`
-      : `Here are the **most profitable trade routes**:`;
-
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent: "trade_route",
-        dataDescription: `Found ${top.length} trade routes${query.commodity ? ` for ${query.commodity.name}` : ""}. Best route: buy ${bestRoute.commodity_name} at ${bestRoute.origin_terminal_name} (${formatPrice(bestRoute.price_origin)} aUEC) → sell at ${bestRoute.destination_terminal_name} (${formatPrice(bestRoute.price_destination)} aUEC) for ${formatPrice(bestRoute.price_margin)} aUEC/SCU profit. A table and map are shown separately.`,
-      },
-      table: {
-        headers: ["Commodity", "Buy At", "Sell At", "Buy Price", "Sell Price", "Profit/SCU"],
-        rows: top.map((r) => [
-          uexLink(r.commodity_name),
-          r.origin_terminal_name || `Terminal #${r.id_terminal_origin}`,
-          r.destination_terminal_name || `Terminal #${r.id_terminal_destination}`,
-          formatPrice(r.price_origin),
-          formatPrice(r.price_destination),
-          formatPrice(r.price_margin),
-        ]),
-      },
-      map: {
-        system: systemName,
-        routes: mapRoutes,
-        highlights,
-      },
-    };
-  } catch {
-    const text = 'Couldn\'t fetch trade routes. Try specifying a commodity: "Best trade route for Agricium"';
-    return { text, fallbackText: text };
-  }
+  const text = `**Trade routes by gross price spread**${query.commodity ? ` for ${query.commodity.name}` : ""}${locationLabel(query)}. Spread is sell price minus buy price, in aUEC/SCU. Fuel, fees, travel time, and load quantity are not included. Ask for a profit estimate to apply current supply, forecast demand, and cargo capacity.`;
+  const systems = new Set(available.flatMap(r => [r.origin_star_system_name, r.destination_star_system_name]));
+  return { text, fallbackText: text,
+    sourceRows: available.flatMap(r => [{ game_version: r.game_version_origin }, { game_version: r.game_version_destination }]),
+    table: { headers: ["Commodity", "Buy At", "Sell At", "Buy (aUEC/SCU)", "Sell (aUEC/SCU)", "Spread (aUEC/SCU)", "Reported Distance (Gm)", "Source Patches"],
+      rows: available.map(r => [uexLink(r.commodity_name), r.origin_terminal_name, r.destination_terminal_name, formatPrice(r.price_origin), formatPrice(r.price_destination), formatPrice(r.price_destination-r.price_origin), r.distance > 0 ? String(r.distance) : "Unknown", `${r.game_version_origin || "Unknown"} / ${r.game_version_destination || "Unknown"}`]) },
+    map: systems.size === 1 && available[0].origin_star_system_name ? {
+      system: available[0].origin_star_system_name,
+      routes: available.map(r => ({ from: r.origin_terminal_name, to: r.destination_terminal_name, profit: r.price_destination-r.price_origin, commodity: r.commodity_name })),
+      highlights: [...new Set(available.flatMap(r => [r.origin_terminal_name, r.destination_terminal_name]))],
+    } : undefined,
+  };
 }
 
 async function handlePriceCheck(query: ParsedQuery): Promise<HandlerResult> {
@@ -627,7 +632,7 @@ async function handlePriceCheck(query: ParsedQuery): Promise<HandlerResult> {
   }
 
   let prices = await getCommodityPrices({ commodity_name: query.commodity.name });
-  prices = filterByLocation(prices, query);
+  prices = filterByLocation(prices, query).filter((price) => isBuyable(price) || isSellable(price));
 
   if (prices.length === 0) {
     const loc = locationLabel(query);
@@ -635,8 +640,8 @@ async function handlePriceCheck(query: ParsedQuery): Promise<HandlerResult> {
     return { text, fallbackText: text };
   }
 
-  const buyPrices = prices.filter((p) => p.price_buy > 0);
-  const sellPrices = prices.filter((p) => p.price_sell > 0);
+  const buyPrices = prices.filter(isBuyable);
+  const sellPrices = prices.filter(isSellable);
 
   const minBuy = buyPrices.length > 0 ? Math.min(...buyPrices.map((p) => p.price_buy)) : 0;
   const maxBuy = buyPrices.length > 0 ? Math.max(...buyPrices.map((p) => p.price_buy)) : 0;
@@ -667,12 +672,24 @@ async function handlePriceCheck(query: ParsedQuery): Promise<HandlerResult> {
   } else {
     dataSummary += `Not accepted for sale at any terminal. `;
   }
-  dataSummary += `${prices.length} terminals trading this commodity.`;
+  dataSummary += `${prices.length} reported trading locations: ${buyPrices.length} offer purchases by the player and ${sellPrices.length} accept sales from the player. Each location may support only one direction.`;
   if (query.commodity.is_illegal) dataSummary += ` Warning: this is an illegal commodity.`;
 
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: prices,
+    ...(/\b(?:buy\s+and\s+sell|sell\s+and\s+buy)\b/i.test(query.raw) ? {
+      table: {
+        headers: ["Terminal", "Location", "Buy (aUEC/SCU)", "Sell (aUEC/SCU)"],
+        rows: prices.filter((price) => isBuyable(price) || isSellable(price)).slice(0, 50).map((price) => [
+          price.terminal_name,
+          [price.moon_name || price.planet_name || price.space_station_name, price.star_system_name].filter(Boolean).join(", "),
+          isBuyable(price) ? formatPrice(price.price_buy) : "Not available",
+          isSellable(price) ? formatPrice(price.price_sell) : "Not accepted",
+        ]),
+      },
+    } : {}),
     dataContext: {
       intent: "price_check",
       dataDescription: dataSummary,
@@ -681,119 +698,17 @@ async function handlePriceCheck(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 async function handlePriceHistory(query: ParsedQuery): Promise<HandlerResult> {
-  if (!query.commodity) {
-    const text = 'Which commodity do you want price history for? Try: "Price history of Laranite"';
-    return { text, fallbackText: text };
-  }
-
-  try {
-    const averages = await getCommodityAverages({ id_commodity: query.commodity.id });
-
-    if (averages.length === 0) {
-      const text = `No average data found for **${query.commodity.name}**.`;
-      return { text, fallbackText: text };
-    }
-
-    const avg = averages[0];
-    let fallbackText = `**${query.commodity.name}** price averages:\n\n`;
-    fallbackText += `- Current Buy: ${formatPrice(avg.price_buy)} aUEC/SCU\n`;
-    fallbackText += `- Buy Range: ${formatPrice(avg.price_buy_min)} - ${formatPrice(avg.price_buy_max)} (avg ${formatPrice(avg.price_buy_avg)})\n`;
-    fallbackText += `- Current Sell: ${formatPrice(avg.price_sell)} aUEC/SCU\n`;
-    fallbackText += `- Sell Range: ${formatPrice(avg.price_sell_min)} - ${formatPrice(avg.price_sell_max)} (avg ${formatPrice(avg.price_sell_avg)})\n`;
-    fallbackText += `- Buy Volatility: ${avg.volatility_price_buy.toFixed(1)}%\n`;
-    fallbackText += `- Sell Volatility: ${avg.volatility_price_sell.toFixed(1)}%\n`;
-    if (avg.cax_score) fallbackText += `- CAX Score: ${avg.cax_score}`;
-
-    // Build chart data from averages (show current, min, avg, max as data points)
-    const chartData = [
-      { label: "Min", buyPrice: avg.price_buy_min, sellPrice: avg.price_sell_min },
-      { label: "Average", buyPrice: avg.price_buy_avg, sellPrice: avg.price_sell_avg },
-      { label: "Current", buyPrice: avg.price_buy, sellPrice: avg.price_sell },
-      { label: "Max", buyPrice: avg.price_buy_max, sellPrice: avg.price_sell_max },
-    ];
-
-    const dataSummary = `${query.commodity.name} price history. Current buy: ${formatPrice(avg.price_buy)} aUEC/SCU (range: ${formatPrice(avg.price_buy_min)}-${formatPrice(avg.price_buy_max)}, avg: ${formatPrice(avg.price_buy_avg)}). Current sell: ${formatPrice(avg.price_sell)} aUEC/SCU (range: ${formatPrice(avg.price_sell_min)}-${formatPrice(avg.price_sell_max)}, avg: ${formatPrice(avg.price_sell_avg)}). Buy volatility: ${avg.volatility_price_buy.toFixed(1)}%. Sell volatility: ${avg.volatility_price_sell.toFixed(1)}%.${avg.cax_score ? ` CAX Score: ${avg.cax_score}.` : ""} A chart is shown separately.`;
-
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent: "price_history",
-        dataDescription: dataSummary,
-      },
-      chart: {
-        type: "line" as const,
-        data: chartData,
-        commodityName: query.commodity.name,
-      },
-    };
-  } catch {
-    const text = `Couldn't fetch price history for **${query.commodity.name}**. The averages endpoint may require authentication.`;
-    return { text, fallbackText: text };
-  }
+  const result = await buildPriceHistoryAnswer(query);
+  return { ...result, fallbackText: result.text };
 }
 
-async function handleCommodityRanking(): Promise<HandlerResult> {
-  try {
-    const allPrices = await getCommodityPricesAll();
-
-    // Group by commodity and compute best buy/sell spread
-    const commodityData = new Map<string, { minBuy: number; maxSell: number; name: string }>();
-
-    for (const p of allPrices) {
-      const existing = commodityData.get(p.commodity_name);
-      if (!existing) {
-        commodityData.set(p.commodity_name, {
-          name: p.commodity_name,
-          minBuy: p.price_buy > 0 ? p.price_buy : Infinity,
-          maxSell: p.price_sell > 0 ? p.price_sell : 0,
-        });
-      } else {
-        if (p.price_buy > 0 && p.price_buy < existing.minBuy) existing.minBuy = p.price_buy;
-        if (p.price_sell > 0 && p.price_sell > existing.maxSell) existing.maxSell = p.price_sell;
-      }
-    }
-
-    const ranked = Array.from(commodityData.values())
-      .filter((c) => c.minBuy < Infinity && c.maxSell > 0)
-      .map((c) => ({
-        ...c,
-        profit: c.maxSell - c.minBuy,
-        roi: ((c.maxSell - c.minBuy) / c.minBuy) * 100,
-      }))
-      .sort((a, b) => b.profit - a.profit)
-      .slice(0, 10);
-
-    if (ranked.length === 0) {
-      const text = "No commodity ranking data available right now.";
-      return { text, fallbackText: text };
-    }
-
-    const fallbackText = "Here are the **most profitable commodities** (best buy vs best sell spread):";
-    const top3 = ranked.slice(0, 3).map((r) => `${r.name} (${formatPrice(r.profit)} aUEC/SCU profit, ${r.roi.toFixed(1)}% ROI)`).join(", ");
-
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent: "commodity_ranking",
-        dataDescription: `Top ${ranked.length} most profitable commodities by buy/sell spread. Top 3: ${top3}. A table with all rankings is shown separately.`,
-      },
-      table: {
-        headers: ["Commodity", "Best Buy", "Best Sell", "Profit/SCU", "ROI %"],
-        rows: ranked.map((r) => [
-          uexLink(r.name),
-          formatPrice(r.minBuy),
-          formatPrice(r.maxSell),
-          formatPrice(r.profit),
-          `${r.roi.toFixed(1)}%`,
-        ]),
-      },
-    };
-  } catch {
-    const text = "Couldn't compute commodity rankings right now. Please try again later.";
-    return { text, fallbackText: text };
-  }
+async function handleCommodityRanking(query: ParsedQuery): Promise<HandlerResult> {
+  const [prices, { terminals }] = await Promise.all([getTradePrices(), getReferenceData()]);
+  const trades = findTradeOpportunities(filterByLocation(prices, query), terminals, 1, undefined, query.vehicle).slice(0, 10);
+  const text = trades.length ? "**Commodity rankings by estimated gross profit for up to 1 SCU**, limited by available buy/sell quantities. " + TRADE_ESTIMATE_NOTE : "No profitable, available commodity pairs found for those locations.";
+  return { text, fallbackText: text, sourceRows: trades.flatMap(t => [t.buy, t.sell]),
+    table: { headers: ["Commodity", "Buy At", "Sell At", "Spread (aUEC/SCU)", "Planned SCU", "Gross Profit (aUEC)", "ROI"],
+      rows: trades.map(t => [uexLink(t.name), t.buy.terminal_name, t.sell.terminal_name, formatPrice(t.profitPerScu), String(t.scu), formatPrice(t.profit), `${(100*t.profitPerScu/t.buy.price_buy).toFixed(1)}%`]) } };
 }
 
 async function handleFindCommodity(query: ParsedQuery): Promise<HandlerResult> {
@@ -819,6 +734,8 @@ async function handleFindCommodity(query: ParsedQuery): Promise<HandlerResult> {
   if (c.is_raw) flags.push("Raw");
   if (c.is_refined) flags.push("Refined");
   if (c.is_harvestable) flags.push("Harvestable");
+  if (c.is_refinable) flags.push("Refinable");
+  if (c.is_pure) flags.push("Pure");
   if (flags.length > 0) fallbackText += `- Tags: ${flags.join(", ")}`;
 
   let prices = await fetchCommodityPrices(c);
@@ -835,24 +752,29 @@ async function handleFindCommodity(query: ParsedQuery): Promise<HandlerResult> {
   if (buyLocations.length > 0) {
     tables.push({
       title: `Where to Buy (${buyLocations.length})`,
-      headers: ["Terminal", "Location", "Buy Price", "Stock"],
+      headers: ["Terminal", "Location", "Buy Price", "Stock", "Reported (UTC)", "Patch"],
       rows: buyLocations.map((p) => [
         p.terminal_name,
         [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
         `${formatPrice(p.price_buy)} aUEC/SCU`,
         formatStock(p.scu_buy),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     });
   }
   if (sellLocations.length > 0) {
     tables.push({
       title: `Where to Sell (${sellLocations.length})`,
-      headers: ["Terminal", "Location", "Sell Price", "Demand"],
+      headers: ["Terminal", "Location", "Sell Price", "Forecast Demand", "Terminal Inventory", "Reported (UTC)", "Patch"],
       rows: sellLocations.map((p) => [
         p.terminal_name,
         [p.planet_name, p.star_system_name].filter(Boolean).join(", "),
         `${formatPrice(p.price_sell)} aUEC/SCU`,
+        formatStock(p.scu_sell),
         formatStock(p.scu_sell_stock),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     });
   }
@@ -869,6 +791,7 @@ async function handleFindCommodity(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: prices,
     dataContext: {
       intent: "find_commodity",
       dataDescription: dataSummary,
@@ -881,7 +804,7 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (!query.vehicle) {
     const { vehicles } = await getReferenceData();
     const ships = vehicles
-      .filter((v) => v.is_spaceship && v.scu > 0)
+      .filter((v) => v.is_spaceship && !v.is_concept && v.scu > 0)
       .sort((a, b) => b.scu - a.scu)
       .slice(0, 10);
 
@@ -900,7 +823,7 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
           v.name,
           v.company_name,
           String(v.scu),
-          String(v.crew),
+          formatCrew(v.crew),
           v.pad_type || "N/A",
         ]),
       },
@@ -908,6 +831,10 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   }
 
   const v = query.vehicle;
+  const { vehicles: catalogue } = await getReferenceData();
+  const loanerIds = (v.ids_vehicles_loaners || "").split(",").map(Number).filter(id => id > 0);
+  const logistics = shipLogistics(v);
+  if (loanerIds.length) logistics.push(`Loaners: ${loanerIds.map(id => catalogue.find(ship => ship.id === id)?.name_full || `Vehicle #${id}`).join(", ")}.`);
 
   // Fetch UEX prices + wiki data in parallel for speed
   const [purchaseResult, rentalResult, wikiResult, hardpointResult, manufacturerResult] =
@@ -928,7 +855,7 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   let fallbackText = `**${vehicleDisplayName(v)}**\n\n`;
   fallbackText += `- Manufacturer: ${v.company_name}\n`;
   fallbackText += `- Cargo: ${v.scu} SCU\n`;
-  fallbackText += `- Crew: ${v.crew}\n`;
+  fallbackText += `- Crew: ${formatCrew(v.crew)}\n`;
   if (v.length > 0 || v.width > 0 || v.height > 0) {
     fallbackText += `- Dimensions: ${v.length}m x ${v.width}m x ${v.height}m\n`;
   }
@@ -946,7 +873,7 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (wiki?.productionState) fallbackText += `- Status: ${wiki.productionState}\n`;
   if (wiki?.series) fallbackText += `- Series: ${wiki.series}\n`;
 
-  let dataSummary = `${vehicleDisplayName(v)} by ${v.company_name}. Cargo: ${v.scu} SCU. Crew: ${v.crew}. Pad size: ${v.pad_type || "N/A"}.`;
+  let dataSummary = `${vehicleDisplayName(v)} by ${v.company_name}. Cargo: ${v.scu} SCU. Crew: ${formatCrew(v.crew)}. Pad size: ${v.pad_type || "N/A"}.`;
   if (v.length > 0) dataSummary += ` Dimensions: ${v.length}m x ${v.width}m x ${v.height}m.`;
   if (v.mass) dataSummary += ` Mass: ${formatPrice(v.mass)} kg.`;
   if (v.fuel_quantum) dataSummary += ` Quantum fuel: ${formatPrice(v.fuel_quantum)}.`;
@@ -994,6 +921,8 @@ async function handleVehicleInfo(query: ParsedQuery): Promise<HandlerResult> {
     text: fallbackText,
     fallbackText,
     image,
+    notes: logistics,
+    sourceRows: [v],
     dataContext: {
       intent: "vehicle_info",
       dataDescription: dataSummary,
@@ -1026,7 +955,7 @@ async function handleVehicleCompare(query: ParsedQuery): Promise<HandlerResult> 
   }
 
   const [scuA, scuB] = compare(a.scu, b.scu, true);
-  const [crewA, crewB] = compare(a.crew, b.crew, false);
+  const [crewA, crewB] = compareCrew(a.crew, b.crew);
   const [massA, massB] = compare(a.mass, b.mass, false);
   const [lenA, lenB] = compare(a.length, b.length, false);
   const [qfA, qfB] = compare(a.fuel_quantum, b.fuel_quantum, true);
@@ -1043,6 +972,9 @@ async function handleVehicleCompare(query: ParsedQuery): Promise<HandlerResult> 
   if (a.width > 0 || b.width > 0) rows.push(["Width (m)", String(a.width), String(b.width)]);
   if (a.height > 0 || b.height > 0) rows.push(["Height (m)", String(a.height), String(b.height)]);
   rows.push(["Pad Size", a.pad_type || "N/A", b.pad_type || "N/A"]);
+  rows.push(["Concept", a.is_concept == null ? "Unknown" : a.is_concept ? "Yes" : "No", b.is_concept == null ? "Unknown" : b.is_concept ? "Yes" : "No"]);
+  rows.push(["Loading Dock Required", a.is_loading_dock == null ? "Unknown" : a.is_loading_dock ? "Yes" : "No", b.is_loading_dock == null ? "Unknown" : b.is_loading_dock ? "Yes" : "No"]);
+  rows.push(["Container Sizes (SCU)", a.container_sizes || "Unknown", b.container_sizes || "Unknown"]);
   if (a.fuel_quantum > 0 || b.fuel_quantum > 0) rows.push(["Quantum Fuel", qfA, qfB]);
   if (a.fuel_hydrogen > 0 || b.fuel_hydrogen > 0) rows.push(["Hydrogen Fuel", hfA, hfB]);
   rows.push(["Roles", getVehicleRoles(a).join(", ") || "N/A", getVehicleRoles(b).join(", ") || "N/A"]);
@@ -1050,7 +982,7 @@ async function handleVehicleCompare(query: ParsedQuery): Promise<HandlerResult> 
   const cargoWinner = a.scu > b.scu ? a.name : b.scu > a.scu ? b.name : "tied";
   const rolesA = getVehicleRoles(a).join(", ") || "N/A";
   const rolesB = getVehicleRoles(b).join(", ") || "N/A";
-  const dataSummary = `Comparing ${a.name} (by ${a.company_name}) vs ${b.name} (by ${b.company_name}). ${a.name}: ${a.scu} SCU cargo, ${a.crew} crew, ${a.pad_type || "N/A"} pad, roles: ${rolesA}. ${b.name}: ${b.scu} SCU cargo, ${b.crew} crew, ${b.pad_type || "N/A"} pad, roles: ${rolesB}. Cargo winner: ${cargoWinner}. A comparison table is shown separately.`;
+  const dataSummary = `Comparing ${a.name} (by ${a.company_name}) vs ${b.name} (by ${b.company_name}). ${a.name}: ${a.scu} SCU cargo, ${formatCrew(a.crew)} crew, ${a.pad_type || "N/A"} pad, roles: ${rolesA}. ${b.name}: ${b.scu} SCU cargo, ${formatCrew(b.crew)} crew, ${b.pad_type || "N/A"} pad, roles: ${rolesB}. Cargo winner: ${cargoWinner}. A comparison table is shown separately.`;
 
   return {
     text: fallbackText,
@@ -1067,73 +999,24 @@ async function handleVehicleCompare(query: ParsedQuery): Promise<HandlerResult> 
 }
 
 async function handleProfitCalc(query: ParsedQuery): Promise<HandlerResult> {
-  // Need at least a vehicle or commodity
-  if (!query.vehicle && !query.commodity) {
-    const text = 'I need a ship and/or commodity to calculate profit. Try: "How much profit with a C2 selling Laranite?"';
-    return { text, fallbackText: text };
-  }
-
-  // If we have a vehicle but no commodity, suggest the most profitable one
-  if (query.vehicle && !query.commodity) {
-    const text = `The **${query.vehicle.name}** has **${query.vehicle.scu} SCU** of cargo capacity. To calculate profit, specify a commodity too. Try: "How much profit selling Laranite with a ${query.vehicle.name}?"`;
-    return { text, fallbackText: text };
-  }
-
   if (!query.commodity) {
-    const text = 'I need to know which commodity to calculate profit for. Try: "How much can I make selling Laranite?"';
+    const text = 'Specify a commodity to estimate profit, for example: "How much profit with a C2 selling Laranite?"';
     return { text, fallbackText: text };
   }
-
-  // Get prices
-  let prices = await getCommodityPrices({ commodity_name: query.commodity.name });
-  prices = filterByLocation(prices, query);
-
-  const buyable = prices.filter((p) => isBuyable(p)).sort((a, b) => a.price_buy - b.price_buy);
-  const sellable = prices.filter((p) => isSellable(p)).sort((a, b) => b.price_sell - a.price_sell);
-
-  if (buyable.length === 0 || sellable.length === 0) {
-    const text = `Can't calculate profit for **${query.commodity.name}** — not enough price data (need both buy and sell prices).`;
+  const capacity = query.vehicle?.scu ?? 96;
+  const [prices, { terminals }] = await Promise.all([fetchCommodityPrices(query.commodity), getReferenceData()]);
+  const trade = findTradeOpportunities(filterByLocation(prices, query), terminals, capacity, query.budget, query.vehicle, query.terminal?.id)[0];
+  if (!trade) {
+    const text = `No profitable, available trade for **${query.commodity.name}** fits those locations, supply, demand, and ship constraints.`;
     return { text, fallbackText: text };
   }
-
-  const bestBuy = buyable[0];
-  const bestSell = sellable[0];
-  const scu = query.vehicle?.scu || 96; // Default to 96 SCU if no ship specified
-  const shipName = query.vehicle?.name || `${scu} SCU cargo`;
-
-  const profitData = {
-    shipName,
-    commodityName: query.commodity.name,
-    scu,
-    buyPrice: bestBuy.price_buy,
-    sellPrice: bestSell.price_sell,
-    buyTerminal: bestBuy.terminal_name,
-    sellTerminal: bestSell.terminal_name,
-  };
-
-  const investment = bestBuy.price_buy * scu;
-  const revenue = bestSell.price_sell * scu;
-  const profit = revenue - investment;
-  const roi = investment > 0 ? ((profit / investment) * 100).toFixed(1) : "0";
-
-  let fallbackText = `**${query.commodity.name}** profit calculation with **${shipName}** (${scu} SCU):\n\n`;
-  fallbackText += `- Buy at **${bestBuy.terminal_name}** for ${formatPrice(bestBuy.price_buy)} aUEC/SCU\n`;
-  fallbackText += `- Sell at **${bestSell.terminal_name}** for ${formatPrice(bestSell.price_sell)} aUEC/SCU\n`;
-  fallbackText += `- Investment: ${formatPrice(investment)} aUEC\n`;
-  fallbackText += `- Revenue: ${formatPrice(revenue)} aUEC\n`;
-  fallbackText += `- **Profit per run: ${formatPrice(profit)} aUEC** (${roi}% ROI)`;
-
-  const dataSummary = `Profit calculation for ${query.commodity.name} with ${shipName} (${scu} SCU). Buy at ${bestBuy.terminal_name} for ${formatPrice(bestBuy.price_buy)} aUEC/SCU. Sell at ${bestSell.terminal_name} for ${formatPrice(bestSell.price_sell)} aUEC/SCU. Investment: ${formatPrice(investment)} aUEC. Revenue: ${formatPrice(revenue)} aUEC. Profit per run: ${formatPrice(profit)} aUEC (${roi}% ROI). A profit visualization is shown separately.`;
-
-  return {
-    text: fallbackText,
-    fallbackText,
-    dataContext: {
-      intent: "profit_calc",
-      dataDescription: dataSummary,
-    },
-    profit: profitData,
-  };
+  const assumptions = [TRADE_ESTIMATE_NOTE, ...trade.assumptions].join(" ");
+  const text = `**${formatPrice(trade.profit)} aUEC estimated gross profit** carrying **${trade.scu} / ${capacity} SCU** of ${trade.name}. Buy at **${trade.buy.terminal_name}**, then sell at **${trade.sell.terminal_name}**.\n\n${assumptions}`;
+  return { text, fallbackText: text, sourceRows: [trade.buy, trade.sell], profit: {
+    commodityName: trade.name, shipName: query.vehicle?.name || `${capacity} SCU cargo`, scu: trade.scu, cargoCapacity: capacity,
+    buyPrice: trade.buy.price_buy, sellPrice: trade.sell.price_sell, buyTerminal: trade.buy.terminal_name, sellTerminal: trade.sell.terminal_name,
+    assumptions,
+  } };
 }
 
 async function handleTerminalInfo(query: ParsedQuery): Promise<HandlerResult> {
@@ -1198,22 +1081,27 @@ async function handleTerminalInfo(query: ParsedQuery): Promise<HandlerResult> {
   if ((showBoth || wantsBuy) && buying.length > 0) {
     tables.push({
       title: `Available to Buy (${buying.length})`,
-      headers: ["Commodity", "Buy Price", "Stock"],
+      headers: ["Commodity", "Buy Price", "Stock", "Reported (UTC)", "Patch"],
       rows: buying.map((p) => [
         uexLink(p.commodity_name),
         `${formatPrice(p.price_buy)} aUEC/SCU`,
         formatStock(p.scu_buy),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     });
   }
   if ((showBoth || wantsSell) && selling.length > 0) {
     tables.push({
       title: `Sellable Here (${selling.length})`,
-      headers: ["Commodity", "Sell Price", "Demand"],
+      headers: ["Commodity", "Sell Price", "Forecast Demand", "Terminal Inventory", "Reported (UTC)", "Patch"],
       rows: selling.map((p) => [
         uexLink(p.commodity_name),
         `${formatPrice(p.price_sell)} aUEC/SCU`,
+        formatStock(p.scu_sell),
         formatStock(p.scu_sell_stock),
+        formatReportTimestamp(p.date_modified ?? p.date_added),
+        p.game_version || "Unknown",
       ]),
     });
   }
@@ -1243,6 +1131,7 @@ async function handleTerminalInfo(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: prices,
     dataContext: {
       intent: "terminal_info",
       dataDescription: dataSummary,
@@ -1257,7 +1146,7 @@ async function handleStationInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (query.planet) filters.id_planet = query.planet.planetId;
 
   const stations = await getSpaceStations(filters);
-  const available = stations.filter((s) => s.is_available);
+  const available = filterByLocation(stations, { ...query, station: undefined }).filter(s => s.is_available && (!query.station || s.id === query.station.stationId));
 
   if (available.length === 0) {
     const text = "No space stations found for that location.";
@@ -1333,7 +1222,7 @@ async function handleCityInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (query.planet) filters.id_planet = query.planet.planetId;
 
   const cities = await getCities(filters);
-  const available = cities.filter((c) => c.is_available);
+  const available = filterByLocation(cities, { ...query, city: undefined }).filter(c => c.is_available && (!query.city || c.id === query.city.cityId));
 
   if (available.length === 0) {
     const text = "No cities found for that location.";
@@ -1379,7 +1268,7 @@ async function handleOutpostInfo(query: ParsedQuery): Promise<HandlerResult> {
   if (query.moon) filters.id_moon = query.moon.moonId;
 
   const outposts = await getOutposts(filters);
-  const available = outposts.filter((o) => o.is_available);
+  const available = filterByLocation(outposts, query).filter(o => o.is_available);
 
   if (available.length === 0) {
     const text = "No outposts found for that location. Try specifying a planet or moon like Hurston, Daymar, or Cellin.";
@@ -1440,6 +1329,10 @@ async function handleOutpostInfo(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 async function handleLocationInfo(query: ParsedQuery): Promise<HandlerResult> {
+  if (query.orbit || query.poi) {
+    const result = await buildExtendedLocationAnswer(query);
+    return { ...result, fallbackText: result.text };
+  }
   // Fallback: if no specific entity resolved, try to resolve from locationName or raw query text
   if (!query.moon && !query.planet && !query.starSystem) {
     const { terminals, starSystemMap } = await getReferenceData();
@@ -1634,236 +1527,59 @@ async function handleLocationInfo(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 async function handleMultiHop(query: ParsedQuery): Promise<HandlerResult> {
-  const scu = query.vehicle?.scu || 96;
-  const shipName = query.vehicle?.name || `${scu} SCU cargo`;
-  const systemFilter = query.starSystem?.name;
-
-  try {
-    const result = await planMultiHopRoute(scu, 3, systemFilter);
-
-    if (!result || result.stops.length === 0) {
-      const text = "Couldn't find profitable multi-hop routes right now. Try specifying a ship or system.";
-      return { text, fallbackText: text };
-    }
-
-    let fallbackText = `**Multi-hop route plan** for **${shipName}** (${scu} SCU):\n\n`;
-
-    for (const stop of result.stops) {
-      if (stop.action === "buy") {
-        fallbackText += `- **Step ${stop.step}:** Buy **${stop.commodityName}** at **${stop.terminalName}** (${formatPrice(stop.pricePerScu!)} aUEC/SCU, ${formatPrice(stop.totalCost!)} total)\n`;
-      } else if (stop.action === "fly") {
-        fallbackText += `- **Step ${stop.step}:** Fly to **${stop.terminalName}**\n`;
-      } else if (stop.action === "sell") {
-        fallbackText += `- **Step ${stop.step}:** Sell **${stop.commodityName}** at **${stop.terminalName}** (${formatPrice(stop.pricePerScu!)} aUEC/SCU, +${formatPrice(stop.profit!)} profit)\n`;
-      }
-    }
-
-    fallbackText += `\n**Total profit: ${formatPrice(result.totalProfit)} aUEC** | Investment: ${formatPrice(result.totalInvestment)} aUEC`;
-
-    // Build map data
-    const mapRoutes: { from: string; to: string; profit: number; commodity: string }[] = [];
-    const highlights: string[] = [];
-
-    for (let i = 0; i < result.stops.length; i++) {
-      const stop = result.stops[i];
-      highlights.push(stop.terminalName);
-
-      if (stop.action === "buy") {
-        // Find the next sell stop
-        const sellStop = result.stops.find(
-          (s, j) =>
-            j > i && s.action === "sell" && s.commodityName === stop.commodityName
-        );
-        if (sellStop) {
-          mapRoutes.push({
-            from: stop.terminalName,
-            to: sellStop.terminalName,
-            profit: sellStop.profit || 0,
-            commodity: stop.commodityName || "",
-          });
-        }
-      }
-    }
-
-    const stopCount = result.stops.filter((s) => s.action !== "fly").length;
-    // Include actual stop details so the LLM doesn't fabricate the itinerary
-    const stopDetails = result.stops
-      .filter((s) => s.action !== "fly")
-      .map((s) => {
-        if (s.action === "buy") return `Buy ${s.commodityName} at ${s.terminalName} (${formatPrice(s.pricePerScu!)} aUEC/SCU)`;
-        return `Sell ${s.commodityName} at ${s.terminalName} (${formatPrice(s.pricePerScu!)} aUEC/SCU, +${formatPrice(s.profit!)} profit)`;
-      })
-      .join(". ");
-    const dataSummary = `Multi-hop route plan for ${shipName} (${scu} SCU)${result.system ? ` in ${result.system}` : ""} with ${stopCount} trade stops. Steps: ${stopDetails}. Total profit: ${formatPrice(result.totalProfit)} aUEC. Investment: ${formatPrice(result.totalInvestment)} aUEC. A map is shown separately.`;
-
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent: "multi_hop",
-        dataDescription: dataSummary,
-      },
-      map: {
-        system: result.system,
-        routes: mapRoutes,
-        highlights: [...new Set(highlights)],
-      },
-    };
-  } catch {
-    const text = "Couldn't compute multi-hop routes right now. Please try again later.";
+  const capacity = query.vehicle?.scu ?? 96;
+  const result = await planMultiHopRoute(capacity, 3, query.starSystem?.name, query.vehicle, {
+    budget: query.budget, originTerminalId: query.terminal?.id, originPlanetId: query.planet?.planetId,
+    originMoonId: query.moon?.moonId, originOrbitId: query.orbit?.orbitId, originPoiId: query.poi?.poiId,
+    originCityId: query.city?.cityId, originStationId: query.station?.stationId,
+  });
+  if (!result?.stops.length) {
+    const text = "No profitable multi-hop route fits the available reports and ship constraints.";
     return { text, fallbackText: text };
   }
+  const text = `**Multi-hop route for ${query.vehicle?.name || `${capacity} SCU cargo`}**: **${formatPrice(result.totalProfit)} aUEC estimated gross profit**, with ${formatPrice(result.totalInvestment)} aUEC total purchase costs across the legs.\n\n${TRADE_ESTIMATE_NOTE} Reported distance: ${result.distanceGm === null ? "incomplete or unknown" : `${result.distanceGm.toFixed(3)} Gm`}.`;
+  const flights = result.stops.filter(s => s.action === "fly");
+  return { text, fallbackText: text, notes: [...result.warnings, ...(query.terminal || query.planet || query.moon || query.orbit || query.poi || query.city || query.station ? ["The selected location constrains the first pickup; later legs may travel elsewhere in the selected system."] : []), ...(query.budget !== undefined ? [`Starting budget: ${formatPrice(query.budget)} aUEC. Later purchases reinvest the proceeds of earlier sales.`] : [])], sourceRows: result.sourceRows,
+    table: { headers: ["Step", "Action", "Terminal", "Cargo", "SCU", "Amount (aUEC)", "Distance (Gm)"],
+      rows: result.stops.map(s => [String(s.step), s.action === "fly" && s.reposition ? "Fly empty to next pickup" : s.action,
+        s.terminalName, s.commodityName || "—", s.quantity == null ? "—" : String(s.quantity),
+        s.action === "buy" ? formatPrice(s.totalCost || 0) : s.action === "sell" ? `+${formatPrice(s.profit || 0)} gross profit` : "—",
+        s.action === "fly" ? s.distanceGm == null ? "Unknown" : s.distanceGm.toFixed(3) : "—"]) },
+    map: result.system && !result.system.includes("→") && !result.system.includes(",") && !result.system.includes(" / ") ? {
+      system: result.system, highlights: [...new Set(result.stops.map(s => s.terminalName))],
+      routes: flights.map(s => ({ from: s.fromTerminalName || "Unknown", to: s.terminalName, profit: 0, commodity: s.reposition ? "Empty reposition" : s.commodityName || "Cargo" })),
+    } : undefined,
+  };
+}
+
+function tradeTable(trades: TradeOpportunity[]) {
+  return { headers: ["Commodity", "Buy At", "Sell At", "Planned SCU", "Investment (aUEC)", "Gross Profit (aUEC)", "Assumptions"],
+    rows: trades.map(t => [uexLink(t.name), t.buy.terminal_name, t.sell.terminal_name, String(t.scu), formatPrice(t.investment), `+${formatPrice(t.profit)}`, t.assumptions.join("; ") || "Reported supply and forecast demand"]) };
 }
 
 async function handleBudgetTrade(query: ParsedQuery): Promise<HandlerResult> {
-  const budget = query.budget || 50000;
-  const scu = query.vehicle?.scu || 96;
-  const shipName = query.vehicle?.name || `${scu} SCU cargo`;
-
-  const allPrices = await getCommodityPricesAll();
-  const filtered = filterByLocation(allPrices, query);
-
-  // Group by commodity: find cheapest buy and highest sell
-  const commodityData = new Map<string, { name: string; minBuy: CommodityPrice; maxSell: CommodityPrice }>();
-
-  for (const p of filtered) {
-    if (isBuyable(p)) {
-      const existing = commodityData.get(p.commodity_name);
-      if (!existing || p.price_buy < existing.minBuy.price_buy) {
-        commodityData.set(p.commodity_name, {
-          name: p.commodity_name,
-          minBuy: p,
-          maxSell: existing?.maxSell || p,
-        });
-      }
-    }
-    if (isSellable(p)) {
-      const existing = commodityData.get(p.commodity_name);
-      if (existing && p.price_sell > existing.maxSell.price_sell) {
-        existing.maxSell = p;
-      }
-    }
-  }
-
-  // Calculate best trades within budget
-  const trades = Array.from(commodityData.values())
-    .filter((c) => c.minBuy.price_buy > 0 && c.maxSell.price_sell > c.minBuy.price_buy)
-    .map((c) => {
-      const maxAffordableScu = Math.min(scu, Math.floor(budget / c.minBuy.price_buy));
-      const investment = c.minBuy.price_buy * maxAffordableScu;
-      const revenue = c.maxSell.price_sell * maxAffordableScu;
-      const profit = revenue - investment;
-      return { ...c, maxAffordableScu, investment, revenue, profit };
-    })
-    .filter((t) => t.maxAffordableScu > 0 && t.profit > 0)
-    .sort((a, b) => b.profit - a.profit)
-    .slice(0, 8);
-
-  if (trades.length === 0) {
-    const text = `No profitable trades found with a budget of **${formatPrice(budget)} aUEC**.`;
-    return { text, fallbackText: text };
-  }
-
-  const fallbackText = `**Best trades with ${formatPrice(budget)} aUEC** using **${shipName}** (${scu} SCU):`;
-  const bestTrade = trades[0];
-  const dataSummary = `Found ${trades.length} profitable trades within a budget of ${formatPrice(budget)} aUEC using ${shipName} (${scu} SCU). Best trade: ${bestTrade.name} — buy at ${bestTrade.minBuy.terminal_name}, sell at ${bestTrade.maxSell.terminal_name} for +${formatPrice(bestTrade.profit)} aUEC profit. A table with all trades is shown separately.`;
-
-  return {
-    text: fallbackText,
-    fallbackText,
-    dataContext: {
-      intent: "budget_trade",
-      dataDescription: dataSummary,
-    },
-    table: {
-      headers: ["Commodity", "Buy At", "Sell At", "SCU", "Investment", "Profit"],
-      rows: trades.map((t) => [
-        uexLink(t.name),
-        t.minBuy.terminal_name,
-        t.maxSell.terminal_name,
-        String(t.maxAffordableScu),
-        formatPrice(t.investment),
-        `+${formatPrice(t.profit)}`,
-      ]),
-    },
-  };
+  const budget = query.budget ?? 50000;
+  const capacity = query.vehicle?.scu ?? 96;
+  const [prices, { terminals }] = await Promise.all([getTradePrices(), getReferenceData()]);
+  const trades = findTradeOpportunities(filterByLocation(prices, query), terminals, capacity, budget, query.vehicle).slice(0, 8);
+  const text = trades.length
+    ? `**Best trades with ${formatPrice(budget)} aUEC**, using ${query.vehicle?.name || `${capacity} SCU cargo`}${locationLabel(query)}.\n\n${TRADE_ESTIMATE_NOTE}`
+    : `No profitable, available trades fit a budget of **${formatPrice(budget)} aUEC** and those ship/location constraints.`;
+  return { text, fallbackText: text, sourceRows: trades.flatMap(t => [t.buy, t.sell]), table: tradeTable(trades) };
 }
 
 async function handleLocationTrade(query: ParsedQuery): Promise<HandlerResult> {
   if (!query.terminal) {
-    const text = 'I need to know your current location. Try: "I\'m at Admin - HUR-L1, what should I buy?" or use @ to mention a station.';
+    const text = 'Specify a starting terminal, for example: "I am at Admin - HUR-L1, what should I buy?"';
     return { text, fallbackText: text };
   }
-
   const terminal = query.terminal;
-  const prices = await getCommodityPrices({ terminal_name: terminal.name });
-
-  const location = [
-    terminal.city_name || terminal.space_station_name || terminal.outpost_name,
-    terminal.planet_name,
-    terminal.star_system_name,
-  ].filter(Boolean).join(", ");
-
-  // What you can buy here and sell profitably elsewhere
-  const buyHere = prices.filter((p) => isBuyable(p));
-
-  if (buyHere.length === 0) {
-    const text = `**${terminal.name}** (${location}) doesn't sell any commodities right now. Try a different terminal.`;
-    return { text, fallbackText: text };
-  }
-
-  // For each buyable commodity, find best sell location
-  const allPrices = await getCommodityPricesAll();
-  const opportunities: { commodity: string; buyPrice: number; sellTerminal: string; sellLocation: string; sellPrice: number; profitPerScu: number }[] = [];
-
-  for (const buy of buyHere) {
-    const sellOptions = allPrices
-      .filter((p) => p.commodity_name === buy.commodity_name && p.price_sell > buy.price_buy && (p.status_sell === undefined || p.status_sell > 0) && p.terminal_name !== terminal.name)
-      .sort((a, b) => b.price_sell - a.price_sell);
-
-    if (sellOptions.length > 0) {
-      const best = sellOptions[0];
-      opportunities.push({
-        commodity: buy.commodity_name,
-        buyPrice: buy.price_buy,
-        sellTerminal: best.terminal_name,
-        sellLocation: [best.planet_name, best.star_system_name].filter(Boolean).join(", "),
-        sellPrice: best.price_sell,
-        profitPerScu: best.price_sell - buy.price_buy,
-      });
-    }
-  }
-
-  opportunities.sort((a, b) => b.profitPerScu - a.profitPerScu);
-  const top = opportunities.slice(0, 8);
-
-  if (top.length === 0) {
-    const text = `No profitable trades found from **${terminal.name}**. All commodities here sell for less elsewhere.`;
-    return { text, fallbackText: text };
-  }
-
-  const fallbackText = `You're at **${terminal.name}** (${location}). Here are the **best commodities to buy and where to sell them**:`;
-  const bestOpp = top[0];
-  const dataSummary = `At ${terminal.name} (${location}), found ${top.length} profitable trade opportunities. Best: buy ${bestOpp.commodity} here for ${formatPrice(bestOpp.buyPrice)} aUEC/SCU, sell at ${bestOpp.sellTerminal} for +${formatPrice(bestOpp.profitPerScu)} aUEC/SCU profit. A table with all opportunities is shown separately.`;
-
-  return {
-    text: fallbackText,
-    fallbackText,
-    dataContext: {
-      intent: "location_trade",
-      dataDescription: dataSummary,
-    },
-    table: {
-      headers: ["Commodity", "Buy Price", "Sell At", "Sell Price", "Profit/SCU"],
-      rows: top.map((o) => [
-        uexLink(o.commodity),
-        `${formatPrice(o.buyPrice)}`,
-        o.sellTerminal,
-        `${formatPrice(o.sellPrice)}`,
-        `+${formatPrice(o.profitPerScu)}`,
-      ]),
-    },
-  };
+  const [local, all, { terminals }] = await Promise.all([getCommodityPrices({ id_terminal: String(terminal.id) }), getTradePrices(), getReferenceData()]);
+  const prices = [...all.filter(p => p.id_terminal !== terminal.id), ...local];
+  const trades = findTradeOpportunities(prices, terminals, query.vehicle?.scu ?? 96, query.budget, query.vehicle, terminal.id).slice(0, 8);
+  const text = trades.length ? `**Trades from ${terminal.name}**${query.vehicle ? ` with ${query.vehicle.name}` : " using 96 SCU capacity"}.\n\n${TRADE_ESTIMATE_NOTE}`
+    : `No profitable, available trades from **${terminal.name}** fit the reported supply, demand, and ship constraints.`;
+  return { text, fallbackText: text, sourceRows: trades.flatMap(t => [t.buy, t.sell]), table: tradeTable(trades) };
 }
 
 async function handleCommodityCategory(query: ParsedQuery): Promise<HandlerResult> {
@@ -1952,10 +1668,10 @@ async function handlePriceCompare(query: ParsedQuery): Promise<HandlerResult> {
 
   const tables: import("@/lib/types").NamedTable[] = [];
 
-  const sys1Buy = sys1Prices.filter((p) => p.price_buy > 0).sort((a, b) => a.price_buy - b.price_buy);
-  const sys1Sell = sys1Prices.filter((p) => p.price_sell > 0).sort((a, b) => b.price_sell - a.price_sell);
-  const sys2Buy = sys2Prices.filter((p) => p.price_buy > 0).sort((a, b) => a.price_buy - b.price_buy);
-  const sys2Sell = sys2Prices.filter((p) => p.price_sell > 0).sort((a, b) => b.price_sell - a.price_sell);
+  const sys1Buy = sys1Prices.filter(isBuyable).sort((a, b) => a.price_buy - b.price_buy);
+  const sys1Sell = sys1Prices.filter(isSellable).sort((a, b) => b.price_sell - a.price_sell);
+  const sys2Buy = sys2Prices.filter(isBuyable).sort((a, b) => a.price_buy - b.price_buy);
+  const sys2Sell = sys2Prices.filter(isSellable).sort((a, b) => b.price_sell - a.price_sell);
 
   if (sys1Buy.length > 0 || sys1Sell.length > 0) {
     const rows: string[][] = [];
@@ -1963,7 +1679,7 @@ async function handlePriceCompare(query: ParsedQuery): Promise<HandlerResult> {
       rows.push([p.terminal_name, `${formatPrice(p.price_buy)} (buy)`, formatStock(p.scu_buy, "—")]);
     }
     for (const p of sys1Sell.slice(0, 5)) {
-      rows.push([p.terminal_name, `${formatPrice(p.price_sell)} (sell)`, formatStock(p.scu_sell_stock, "—")]);
+      rows.push([p.terminal_name, `${formatPrice(p.price_sell)} (sell)`, formatStock(p.scu_sell, "—")]);
     }
     tables.push({
       title: `${sys1.name} (${sys1Buy.length} buy, ${sys1Sell.length} sell)`,
@@ -1978,7 +1694,7 @@ async function handlePriceCompare(query: ParsedQuery): Promise<HandlerResult> {
       rows.push([p.terminal_name, `${formatPrice(p.price_buy)} (buy)`, formatStock(p.scu_buy, "—")]);
     }
     for (const p of sys2Sell.slice(0, 5)) {
-      rows.push([p.terminal_name, `${formatPrice(p.price_sell)} (sell)`, formatStock(p.scu_sell_stock, "—")]);
+      rows.push([p.terminal_name, `${formatPrice(p.price_sell)} (sell)`, formatStock(p.scu_sell, "—")]);
     }
     tables.push({
       title: `${sys2.name} (${sys2Buy.length} buy, ${sys2Sell.length} sell)`,
@@ -2004,6 +1720,7 @@ async function handlePriceCompare(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: [...sys1Prices, ...sys2Prices],
     dataContext: {
       intent: "price_compare",
       dataDescription: dataSummary,
@@ -2013,102 +1730,42 @@ async function handlePriceCompare(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 async function handleFleetTrade(query: ParsedQuery): Promise<HandlerResult> {
-  const vehicles: { name: string; scu: number }[] = [];
-
-  if (query.vehicle) vehicles.push({ name: query.vehicle.name, scu: query.vehicle.scu });
-  if (query.vehicle2) vehicles.push({ name: query.vehicle2.name, scu: query.vehicle2.scu });
-
+  const vehicles = [query.vehicle, query.vehicle2].filter((v): v is Vehicle => !!v);
   if (vehicles.length < 2) {
-    const text = 'I need at least two ships for fleet trading. Try: "Best trades for my C2 and Caterpillar"';
+    const text = 'Specify two ships, for example: "Best trades for my C2 and Caterpillar"';
     return { text, fallbackText: text };
   }
-
-  const allPrices = await getCommodityPricesAll();
-  const filtered = filterByLocation(allPrices, query);
-
-  const tables: import("@/lib/types").NamedTable[] = [];
-  const summaryParts: string[] = [];
-
-  for (const ship of vehicles) {
-    // Find best single-run trade for this ship
-    const commodityData = new Map<string, { minBuy: CommodityPrice; maxSell: CommodityPrice }>();
-
-    for (const p of filtered) {
-      if (isBuyable(p)) {
-        const existing = commodityData.get(p.commodity_name);
-        if (!existing || p.price_buy < existing.minBuy.price_buy) {
-          commodityData.set(p.commodity_name, {
-            minBuy: p,
-            maxSell: existing?.maxSell || p,
-          });
-        }
-      }
-      if (isSellable(p)) {
-        const existing = commodityData.get(p.commodity_name);
-        if (existing && p.price_sell > existing.maxSell.price_sell) {
-          existing.maxSell = p;
-        }
-      }
-    }
-
-    const trades = Array.from(commodityData.entries())
-      .filter(([, c]) => c.maxSell.price_sell > c.minBuy.price_buy)
-      .map(([name, c]) => ({
-        name,
-        buyAt: c.minBuy.terminal_name,
-        sellAt: c.maxSell.terminal_name,
-        profit: (c.maxSell.price_sell - c.minBuy.price_buy) * ship.scu,
-        profitPerScu: c.maxSell.price_sell - c.minBuy.price_buy,
-        investment: c.minBuy.price_buy * ship.scu,
-      }))
-      .sort((a, b) => b.profit - a.profit)
-      .slice(0, 5);
-
-    tables.push({
-      title: `${ship.name} (${ship.scu} SCU)`,
-      headers: ["Commodity", "Buy At", "Sell At", "Profit/Run", "Investment"],
-      rows: trades.map((t) => [
-        uexLink(t.name),
-        t.buyAt,
-        t.sellAt,
-        `+${formatPrice(t.profit)}`,
-        formatPrice(t.investment),
-      ]),
-    });
-
-    if (trades.length > 0) {
-      summaryParts.push(`${ship.name} (${ship.scu} SCU): best trade is ${trades[0].name} for +${formatPrice(trades[0].profit)} aUEC/run`);
-    }
-  }
-
-  const fallbackText = `**Fleet trade recommendations** for ${vehicles.map((v) => `**${v.name}** (${v.scu} SCU)`).join(" and ")}:`;
-  const dataSummary = `Fleet trade recommendations. ${summaryParts.join(". ")}. Tables with top trades per ship are shown separately.`;
-
-  return {
-    text: fallbackText,
-    fallbackText,
-    dataContext: {
-      intent: "fleet_trade",
-      dataDescription: dataSummary,
-    },
-    tables: tables.length > 0 ? tables : undefined,
-  };
+  const [prices, { terminals }] = await Promise.all([getTradePrices(), getReferenceData()]);
+  const filtered = filterByLocation(prices, query);
+  const sourceRows: CommodityPrice[] = [];
+  const tables = vehicles.map(ship => {
+    const trades = findTradeOpportunities(filtered, terminals, ship.scu, query.budget, ship).slice(0, 5);
+    sourceRows.push(...trades.flatMap(t => [t.buy, t.sell]));
+    return { title: `${ship.name} (${ship.scu} SCU)${ship.is_concept ? " — concept; excluded" : trades.length ? "" : " — no matching trades"}`, ...tradeTable(trades) };
+  });
+  const text = `**Fleet trade comparison** for ${vehicles.map(v => v.name).join(" and ")}. Each ship is an independent scenario; these estimates do not allocate shared stock to simultaneous runs.\n\n${TRADE_ESTIMATE_NOTE}`;
+  return { text, fallbackText: text, tables, sourceRows };
 }
 
 const HELP_TEXT =
-  `**Trading**\n` +
+  "**Crafting & Missions**\n" +
+  "- What materials do I need to craft an XL-1 quantum drive?\n" +
+  "- How do I unlock the XL-1 blueprint?\n" +
+  "- Tell me about the Blackbox Retrieval mission\n\n" +
+  `**Reported commodity prices**\n` +
   `- "Where's the best place to sell Laranite?"\n` +
-  `- "Where can I buy Quantainium near Hurston?"\n` +
-  `- "I have 50k aUEC, what should I trade?"\n` +
-  `- "What's the most profitable trade route right now?"\n` +
-  `- "I'm at Port Tressler, what can I trade from here?"\n\n` +
+  `- "Where can I buy Quantanium near Hurston?"\n` +
+  `- "Where can I buy and sell Aluminum?"\n\n` +
   `**Market & Prices**\n` +
-  `- "What's the most profitable commodity?"\n` +
   `- "Price history of Agricium"\n` +
   `- "Compare Laranite prices in Stanton vs Pyro"\n` +
   `- "Show me all metals"\n\n` +
+  `**Mining**\n` +
+  `- "Where can I mine Laranite?"\n` +
+  `- "Which ores are found on Hurston?"\n` +
+  `- "Can I mine Agricium on Daymar?"\n\n` +
   `**Refining & Fuel**\n` +
-  `- "Where should I refine Quantainium?"\n` +
+  `- "Where should I refine Quantanium?"\n` +
   `- "What are the refining methods?"\n` +
   `- "What are the cheapest fuel prices in Stanton?"\n\n` +
   `**Ships**\n` +
@@ -2116,7 +1773,13 @@ const HELP_TEXT =
   `- "Where can I buy the Caterpillar in-game?"\n` +
   `- "What ships can I rent?"\n` +
   `- "Compare C2 vs Caterpillar"\n` +
-  `- "Best trades for my C2 and Caterpillar"\n\n` +
+  `**Equipment & alerts**\n` +
+  `- "Where can I buy Lancet MH2?"\n` +
+  `- "Compare Lancet MH2 vs Arbor MH1"\n` +
+  `- "Show scraper modules"\n` +
+  `- "Compare Abrade vs Trawler"\n` +
+  `- "Show market alerts in Stanton"\n` +
+  `- "Price history of Laranite at TDD - Area18"\n\n` +
   `**Locations**\n` +
   `- "What space stations have a refinery?"\n` +
   `- "Cities on Hurston"\n` +
@@ -2128,7 +1791,7 @@ function handleHelp(): HandlerResult {
     fallbackText: `Here's what I can help you with:\n\n${HELP_TEXT}`,
     dataContext: {
       intent: "help",
-      dataDescription: "User asked what I can do. Displayed a list of features and example queries covering trading, market data, refining, fuel, ships, and locations.",
+      dataDescription: "User asked what I can do. Displayed a list of features and example queries covering trading, market data, mining locations, refining, fuel, ships, and locations.",
     },
   };
 }
@@ -2156,8 +1819,8 @@ async function handleRefineryYields(query: ParsedQuery): Promise<HandlerResult> 
   let filtered = yields;
 
   // Filter by commodity if specified
-  // Refinery yields use raw ore names (e.g. "Quantainium (Raw)") while the
-  // commodity entity may be the refined form ("Quantainium"). Match by:
+  // Refinery yields use raw ore names (e.g. "Quantanium (Raw)") while the
+  // commodity entity may be the refined form ("Quantanium"). Match by:
   // 1. Direct id match
   // 2. Parent id match (refined ↔ raw are linked via id_parent)
   // 3. Substring on names as fallback
@@ -2182,7 +1845,7 @@ async function handleRefineryYields(query: ParsedQuery): Promise<HandlerResult> 
 
   if (filtered.length === 0) {
     const what = query.commodity ? query.commodity.name : "that commodity";
-    const fallbackText = `No refinery yield data found for **${what}**${locationLabel(query)}. It may not be refinable.`;
+    const fallbackText = `UEX has no reported refinery yield entries for **${what}**${locationLabel(query)}. I can't rank refineries for it from the available data.`;
     return {
       text: fallbackText,
       fallbackText,
@@ -2209,8 +1872,9 @@ async function handleRefineryYields(query: ParsedQuery): Promise<HandlerResult> 
       intent: "refinery_yields",
       dataDescription: `Found ${filtered.length} refinery yield entries for ${commodityLabel}${loc}. Best yield bonus: ${best.terminal_name} at ${best.value >= 0 ? "+" : ""}${best.value}%. A table with all refineries, yield bonuses, and capacities is shown separately.`,
     },
+    notes: ["UEX does not clearly specify the unit of its capacity values; they are shown as supplied, not as SCU."],
     table: {
-      headers: ["Refinery", "Location", "Commodity", "Yield Bonus", "Capacity (SCU)"],
+      headers: ["Refinery", "Location", "Commodity", "Yield Bonus", "Capacity (UEX value)"],
       rows: shown.map((y) => [
         y.terminal_name,
         [y.planet_name || y.moon_name || y.space_station_name, y.star_system_name].filter(Boolean).join(", "),
@@ -2296,6 +1960,11 @@ async function handleFuelPrices(query: ParsedQuery): Promise<HandlerResult> {
     const terminal = terminalMap.get(f.id_terminal);
     return {
       ...f,
+      id_moon: terminal?.id_moon,
+      id_orbit: terminal?.id_orbit,
+      id_poi: terminal?.id_poi,
+      id_city: terminal?.id_city,
+      id_space_station: terminal?.id_space_station,
       star_system_name: terminal?.star_system_name ?? "",
       planet_name: terminal?.planet_name ?? null,
       moon_name: terminal?.moon_name ?? null,
@@ -2305,7 +1974,7 @@ async function handleFuelPrices(query: ParsedQuery): Promise<HandlerResult> {
     };
   });
 
-  let filtered = [...enriched];
+  let filtered = enriched.filter(f => Number.isFinite(f.price_buy) && f.price_buy > 0);
 
   // Detect fuel type from query
   const lower = query.raw.toLowerCase();
@@ -2338,12 +2007,13 @@ async function handleFuelPrices(query: ParsedQuery): Promise<HandlerResult> {
   return {
     text: fallbackText,
     fallbackText,
+    sourceRows: filtered as (typeof filtered[number] & ReportMetadata)[],
     dataContext: {
       intent: "fuel_prices",
-      dataDescription: `Found ${filtered.length} ${fuelType.trim()} fuel price entries${loc}. Cheapest: ${cheapest.terminal_name} at ${formatPrice(cheapest.price_buy)} aUEC. A table with all locations and prices is shown separately.`,
+      dataDescription: `Found ${filtered.length} ${fuelType.trim()} fuel price entries${loc}. Cheapest: ${cheapest.terminal_name} at ${formatPrice(cheapest.price_buy)} aUEC/SCU. A table with all locations and prices is shown separately.`,
     },
     table: {
-      headers: ["Terminal", "Location", "Fuel Type", "Price (aUEC)", "Avg Price"],
+      headers: ["Terminal", "Location", "Fuel Type", "Price (aUEC/SCU)", "Average (aUEC/SCU)"],
       rows: filtered.map((f) => [
         f.terminal_name,
         [f.planet_name || f.moon_name || f.space_station_name || f.city_name, f.star_system_name].filter(Boolean).join(", "),
@@ -2375,114 +2045,48 @@ function vehicleLocation(p: { city_name?: string | null; moon_name?: string | nu
 }
 
 async function handleVehiclePrices<
-  TSummary extends { id_vehicle: number; vehicle_name: string; terminal_name: string },
-  TDetail extends { terminal_name: string; city_name?: string | null; moon_name?: string | null; space_station_name?: string | null; outpost_name?: string | null; planet_name?: string | null; star_system_name: string },
+  TSummary extends { id_vehicle: number; id_terminal: number; vehicle_name: string; terminal_name: string },
+  TDetail extends { id_terminal: number; terminal_name: string; city_name?: string | null; moon_name?: string | null; space_station_name?: string | null; outpost_name?: string | null; planet_name?: string | null; star_system_name: string },
 >(query: ParsedQuery, config: VehiclePriceConfig<TSummary, TDetail>): Promise<HandlerResult> {
-  const { intent, noun, fetchAll, fetchOne, getPrice, getAvgPrice } = config;
-
-  // No specific ship — show all available ships with cheapest price
-  if (!query.vehicle) {
-    const allPrices = await fetchAll();
-    if (allPrices.length === 0) {
-      const text = config.emptyAllMsg;
-      return { text, fallbackText: text };
-    }
-
-    const byVehicle = new Map<number, { name: string; price: number; terminal: string }>();
-    for (const p of allPrices) {
-      const price = getPrice(p);
-      const existing = byVehicle.get(p.id_vehicle);
-      if (!existing || price < existing.price) {
-        byVehicle.set(p.id_vehicle, { name: p.vehicle_name, price, terminal: p.terminal_name });
-      }
-    }
-    const ships = [...byVehicle.values()].sort((a, b) => a.price - b.price);
-    const fallbackText = `Here are **all ${ships.length} ships available for in-game ${noun}** (sorted by cheapest price):`;
-
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent,
-        dataDescription: `Found ${ships.length} ships available for in-game ${noun}. Cheapest: ${ships[0].name} at ${formatPrice(ships[0].price)} aUEC. Most expensive: ${ships[ships.length - 1].name} at ${formatPrice(ships[ships.length - 1].price)} aUEC. A table with all ships and prices is shown separately.`,
-      },
-      table: {
-        headers: ["Ship", config.allTableHeader, "Location"],
-        rows: ships.map((s) => [s.name, formatPrice(s.price), s.terminal]),
-      },
-    };
-  }
-
-  // Specific vehicle(s) — fetch detailed prices
-  const vehicles = [query.vehicle];
-  if (query.vehicle2) vehicles.push(query.vehicle2);
-
-  const allPricesArrays = await Promise.all(
-    vehicles.map((v) => fetchOne({ id_vehicle: v.id }))
-  );
-
-  const tables: import("@/lib/types").NamedTable[] = [];
-  const summaryParts: string[] = [];
-
-  for (let i = 0; i < vehicles.length; i++) {
-    const v = vehicles[i];
-    const prices = allPricesArrays[i];
-    const name = vehicleDisplayName(v);
-
-    if (prices.length === 0) {
-      summaryParts.push(`No ${noun} locations found for ${name}.`);
-      continue;
-    }
-
-    const sorted = [...prices].sort((a, b) => getPrice(a) - getPrice(b));
-    const cheapest = sorted[0];
-    summaryParts.push(`${name}: ${sorted.length} locations, cheapest at ${cheapest.terminal_name} for ${formatPrice(getPrice(cheapest))} aUEC.`);
-    tables.push({
-      title: name,
-      headers: ["Terminal", "Location", config.detailPriceHeader, "Avg Price"],
-      rows: sorted.map((p) => [
-        p.terminal_name,
-        vehicleLocation(p),
-        formatPrice(getPrice(p)),
-        formatPrice(getAvgPrice(p)),
-      ]),
+  const { noun, fetchAll, fetchOne, getPrice, getAvgPrice } = config;
+  const reference = await getReferenceData();
+  function enrich<T extends { id_terminal: number }>(rows: T[]) {
+    return rows.filter(row => !query.terminal || row.id_terminal === query.terminal.id).map(row => {
+      const terminal = reference.terminalMap.get(row.id_terminal);
+      return { ...row, id_moon: terminal?.id_moon, id_orbit: terminal?.id_orbit, id_poi: terminal?.id_poi,
+        id_city: terminal?.id_city, id_space_station: terminal?.id_space_station,
+        star_system_name: terminal?.star_system_name, planet_name: terminal?.planet_name,
+        city_name: terminal?.city_name, space_station_name: terminal?.space_station_name,
+        moon_name: terminal?.moon_name, outpost_name: terminal?.outpost_name };
     });
   }
-
-  if (tables.length === 0) {
-    const names = vehicles.map((v) => vehicleDisplayName(v)).join(" and ");
-    const fallbackText = `No ${noun} locations found for **${names}**. ${config.emptyVehicleMsg}`;
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: { intent, dataDescription: fallbackText },
-    };
+  if (!query.vehicle) {
+    const allPrices = filterByLocation(enrich(await fetchAll()), query).filter(p => getPrice(p) > 0 && reference.vehicles.find(v => v.id === p.id_vehicle)?.is_concept !== 1);
+    const byVehicle = new Map<number, typeof allPrices[number]>();
+    for (const price of allPrices) {
+      const previous = byVehicle.get(price.id_vehicle);
+      if (!previous || getPrice(price) < getPrice(previous)) byVehicle.set(price.id_vehicle, price);
+    }
+    const ships = [...byVehicle.values()].sort((a, b) => getPrice(a) - getPrice(b));
+    const text = ships.length ? `**${ships.length} ships available for in-game ${noun}**${locationLabel(query)}, sorted by cheapest reported price.` : `No ship ${noun} prices were found${locationLabel(query)}.`;
+    return { text, fallbackText: text, sourceRows: ships as (typeof ships[number] & ReportMetadata)[],
+      table: { headers: ["Ship", config.allTableHeader, "Terminal"], rows: ships.map(p => [p.vehicle_name, formatPrice(getPrice(p)), p.terminal_name]) } };
   }
-
-  const names = vehicles.map((v) => vehicleDisplayName(v)).join(" and ");
-  const fallbackText = `Here are the **${noun} locations for ${names}**:`;
-
-  if (tables.length === 1) {
-    return {
-      text: fallbackText,
-      fallbackText,
-      dataContext: {
-        intent,
-        dataDescription: summaryParts.join(" ") + ` A table with ${noun} locations is shown separately.`,
-      },
-      table: { headers: tables[0].headers, rows: tables[0].rows },
-    };
-  }
-
-  return {
-    text: fallbackText,
-    fallbackText,
-    dataContext: {
-      intent,
-      dataDescription: summaryParts.join(" ") + ` Tables with ${noun} locations are shown separately.`,
-    },
-    tables,
-  };
+  const vehicles = [query.vehicle, query.vehicle2].filter((v): v is Vehicle => !!v);
+  const arrays = await Promise.all(vehicles.map(v => fetchOne({ id_vehicle: v.id })));
+  const tables: import("@/lib/types").NamedTable[] = [];
+  const sourceRows: ReportMetadata[] = [];
+  const summaries: string[] = [];
+  vehicles.forEach((vehicle, index) => {
+    const prices = filterByLocation(enrich(arrays[index]), query).filter(p => getPrice(p) > 0).sort((a,b) => getPrice(a)-getPrice(b));
+    if (!prices.length) { summaries.push(`No ${noun} prices found for ${vehicleDisplayName(vehicle)}${locationLabel(query)}.`); return; }
+    const reports = prices as (typeof prices[number] & ReportMetadata)[];
+    sourceRows.push(...reports);
+    tables.push({ title: vehicleDisplayName(vehicle), headers: ["Terminal", "Location", config.detailPriceHeader, "Average (aUEC)", "Reported (UTC)", "Patch"],
+      rows: reports.map(p => [p.terminal_name, vehicleLocation(p), formatPrice(getPrice(p)), getAvgPrice(p) > 0 ? formatPrice(getAvgPrice(p)) : "Unknown", formatReportTimestamp(p.date_modified ?? p.date_added), p.game_version || "Unknown"]) });
+  });
+  const text = tables.length ? `**Ship ${noun} locations**${locationLabel(query)}. ${summaries.join(" ")}` : summaries.join(" ");
+  return { text, fallbackText: text, tables, sourceRows };
 }
 
 function handleVehicleBuy(query: ParsedQuery): Promise<HandlerResult> {
@@ -2517,6 +2121,20 @@ function handleVehicleRent(query: ParsedQuery): Promise<HandlerResult> {
 
 async function getHandlerResult(query: ParsedQuery): Promise<HandlerResult> {
   switch (query.intent) {
+    case "equipment_info":
+    case "equipment_buy":
+    case "equipment_compare": {
+      const result = await buildEquipmentAnswer(query);
+      return { ...result, fallbackText: result.text };
+    }
+    case "market_alerts": {
+      const result = await buildMarketAlertsAnswer(query);
+      return { ...result, fallbackText: result.text };
+    }
+    case "mining_locations": {
+      const result = await buildMiningAnswer(query);
+      return { ...result, fallbackText: result.text };
+    }
     case "sell":
       return handleSell(query);
     case "buy":
@@ -2528,7 +2146,7 @@ async function getHandlerResult(query: ParsedQuery): Promise<HandlerResult> {
     case "price_history":
       return handlePriceHistory(query);
     case "commodity_ranking":
-      return handleCommodityRanking();
+      return handleCommodityRanking(query);
     case "find_commodity":
       return handleFindCommodity(query);
     case "vehicle_info":
@@ -2580,23 +2198,27 @@ async function getHandlerResult(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 export async function buildAnswer(query: ParsedQuery): Promise<ChatResponse> {
-  const result = await getHandlerResult(query);
+  if (["craft_recipe", "blueprint_unlock", "mission_info"].includes(query.intent)) return buildCraftingAnswer(query);
+  if (["trade_route", "profit_calc", "multi_hop", "budget_trade", "location_trade", "fleet_trade", "commodity_ranking"].includes(query.intent)) {
+    return { text: 'This assistant focuses on game reference lookups, rather than route planning or projected profit. Ask where to buy or sell a commodity, where to mine an ore, or where to buy a ship or component.' };
+  }
+  if (query.locationError) return { text: query.locationError };
+  const { dataContext, fallbackText, sourceRows, notes = [], ...chatResponse } = await getHandlerResult(query);
+  if (sourceRows?.length) {
+    const versions = await getGameVersions().catch(() => null);
+    notes.push(summarizeDataFreshness(sourceRows, versions?.live));
+  }
+  if (query.commodity) notes.push(...cargoHandlingNotes(query.commodity));
+  const suffix = notes.length ? `\n\n${notes.join("\n\n")}` : "";
 
-  if (result.dataContext) {
-    // Augment data context with active ship info for natural language generation
-    const augmentedContext = { ...result.dataContext };
-    if (query.vehicle && augmentedContext.dataDescription) {
-      augmentedContext.dataDescription += ` Using ship: ${query.vehicle.name_full || query.vehicle.name} (${query.vehicle.scu} SCU cargo capacity).`;
-    }
+  if (dataContext) {
     const text = await generateResponseText(
       query.raw,
-      augmentedContext,
-      result.fallbackText
+      dataContext,
+      fallbackText
     );
-    const { dataContext, fallbackText, ...chatResponse } = result;
-    return { ...chatResponse, text };
+    return { ...chatResponse, text: text + suffix };
   }
 
-  const { dataContext, fallbackText, ...chatResponse } = result;
-  return { ...chatResponse, text: fallbackText };
+  return { ...chatResponse, text: fallbackText + suffix };
 }

@@ -12,15 +12,6 @@ type MentionBackdropProps = {
   mentions: Mention[];
 };
 
-const MENTION_COLORS: Record<string, string> = {
-  commodity: "bg-amber-500/20 text-amber-300",
-  ship: "bg-blue-500/20 text-blue-300",
-  system: "bg-purple-500/20 text-purple-300",
-  planet: "bg-cyan-500/20 text-cyan-300",
-  moon: "bg-indigo-500/20 text-indigo-300",
-  station: "bg-green-500/20 text-green-300",
-};
-
 export function MentionBackdrop({ text, mentions }: MentionBackdropProps) {
   const segments = useMemo(() => {
     if (!text || mentions.length === 0) return null;
@@ -94,7 +85,7 @@ export function MentionBackdrop({ text, mentions }: MentionBackdropProps) {
         seg.type ? (
           <span
             key={i}
-            className={`rounded px-0.5 font-semibold ${MENTION_COLORS[seg.type] || "bg-primary/20 text-primary"}`}
+            className="entity-label rounded px-0.5 font-semibold"
           >
             {seg.text}
           </span>

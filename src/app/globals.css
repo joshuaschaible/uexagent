@@ -127,3 +127,10 @@
     @apply font-sans;
   }
 }
+
+@layer components {
+  /* Shared by all entity types in suggestions and composed chat messages. */
+  .entity-label {
+    @apply bg-secondary text-secondary-foreground;
+  }
+}

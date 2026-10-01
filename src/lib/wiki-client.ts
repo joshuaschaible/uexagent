@@ -4,22 +4,36 @@
  */
 
 const WIKI_BASE = "https://starcitizen.tools/api.php";
-const WIKI_MEDIA_BASE = "https://media.starcitizen.tools";
 
 // In-memory cache with 1-hour TTL (wiki data is relatively static)
 const wikiCache = new Map<string, { data: unknown; time: number }>();
 const WIKI_CACHE_TTL = 60 * 60 * 1000;
+const WIKI_CACHE_LIMIT = 256;
 
 function getCached<T>(key: string): T | null {
   const entry = wikiCache.get(key);
   if (entry && Date.now() - entry.time < WIKI_CACHE_TTL) {
+    // Refresh insertion order so eviction retains recently used entries.
+    wikiCache.delete(key);
+    wikiCache.set(key, entry);
     return entry.data as T;
   }
+  if (entry) wikiCache.delete(key);
   return null;
 }
 
 function setCache(key: string, data: unknown): void {
-  wikiCache.set(key, { data, time: Date.now() });
+  const now = Date.now();
+  for (const [cachedKey, entry] of wikiCache) {
+    if (now - entry.time >= WIKI_CACHE_TTL) wikiCache.delete(cachedKey);
+  }
+  wikiCache.delete(key);
+  while (wikiCache.size >= WIKI_CACHE_LIMIT) {
+    const oldestKey = wikiCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    wikiCache.delete(oldestKey);
+  }
+  wikiCache.set(key, { data, time: now });
 }
 
 async function wikiFetch(params: Record<string, string>): Promise<unknown> {
@@ -33,10 +47,12 @@ async function wikiFetch(params: Record<string, string>): Promise<unknown> {
   const res = await fetch(url.toString(), {
     headers: { Accept: "application/json" },
     next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(10000),
+    redirect: "error",
   });
 
   if (!res.ok) {
-    throw new Error(`Wiki API error: ${res.status} ${res.statusText}`);
+    throw new Error(`Wiki API error: ${res.status}`);
   }
 
   return res.json();
@@ -87,8 +103,8 @@ export async function getPageExtract(title: string): Promise<WikiExtract | null>
 
     setCache(cacheKey, result);
     return result;
-  } catch (error) {
-    console.warn("Wiki extract fetch failed:", (error as Error).message);
+  } catch {
+    console.warn("Wiki extract fetch failed");
     return null;
   }
 }
@@ -140,8 +156,8 @@ export async function getImageUrl(filename: string): Promise<WikiImage | null> {
 
     setCache(cacheKey, result);
     return result;
-  } catch (error) {
-    console.warn("Wiki image fetch failed:", (error as Error).message);
+  } catch {
+    console.warn("Wiki image fetch failed");
     return null;
   }
 }
@@ -206,8 +222,8 @@ async function getPageWikitext(title: string): Promise<string | null> {
     const text = data.parse.wikitext["*"];
     setCache(cacheKey, text);
     return text;
-  } catch (error) {
-    console.warn("Wiki wikitext fetch failed:", (error as Error).message);
+  } catch {
+    console.warn("Wiki wikitext fetch failed");
     return null;
   }
 }
@@ -512,8 +528,8 @@ export async function getJumpPoints(systemName: string): Promise<JumpPoint[]> {
 
     setCache(cacheKey, unique);
     return unique;
-  } catch (error) {
-    console.warn("Wiki jump point search failed:", (error as Error).message);
+  } catch {
+    console.warn("Wiki jump point search failed");
     return [];
   }
 }

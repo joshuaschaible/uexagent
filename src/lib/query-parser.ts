@@ -1,7 +1,10 @@
 import type { Commodity, StarSystem, Vehicle, Terminal } from "@/lib/uex-client";
-import { findCommodity, findStarSystem, findPlanet, findMoon, findVehicle, findTerminal } from "@/lib/data/cache";
+import { findCommodity, findStarSystem, findPlanet, findMoon, findVehicle, findTerminal, findTerminalByAlias } from "@/lib/data/cache";
 
 export type Intent =
+  | "craft_recipe"
+  | "blueprint_unlock"
+  | "mission_info"
   | "sell"
   | "buy"
   | "trade_route"
@@ -25,6 +28,11 @@ export type Intent =
   | "fleet_trade"
   | "refinery_yields"
   | "refinery_method"
+  | "mining_locations"
+  | "equipment_info"
+  | "equipment_buy"
+  | "equipment_compare"
+  | "market_alerts"
   | "fuel_prices"
   | "vehicle_buy"
   | "vehicle_rent"
@@ -39,10 +47,22 @@ export type ParsedQuery = {
   starSystem2?: StarSystem;
   planet?: { planetName: string; planetId: number };
   moon?: { moonName: string; moonId: number };
+  orbit?: { orbitName: string; orbitId: number };
+  poi?: { poiName: string; poiId: number };
+  city?: { cityName: string; cityId: number };
+  station?: { stationName: string; stationId: number };
   vehicle?: Vehicle;
   vehicle2?: Vehicle;
   terminal?: Terminal;
   locationName?: string;
+  locationError?: string;
+  itemName?: string;
+  itemName2?: string;
+  equipmentCategory?: string;
+  equipmentSize?: number;
+  gameVersion?: string;
+  dateFrom?: string;
+  dateTo?: string;
   budget?: number;
   category?: string;
   modifiers: string[];
@@ -165,6 +185,164 @@ const MODIFIER_KEYWORDS = [
   "best", "cheapest", "highest", "lowest", "most", "top", "profitable", "both", "all",
 ];
 
+export const EQUIPMENT_CATEGORIES: [RegExp, string][] = [
+  [/\b(?:(?:scrap{1,2}er|(?:hull\s+)?scraping)\s+(?:modules?|beams?)|salvag(?:e|ing)\s+modules?|abrade|cinch|trawler|ready\s*grip)\b/i, "scraper beams"],
+  [/\bsalvage\s+beams?\b/i, "salvage beams"],
+  [/\b(?:mining (?:lasers?|laser heads?|heads?)|lancet|arbor|hofstede|helix|klein|lawson|pitman|mh[12v])\b/i, "mining lasers"],
+  [/\bmining modules?\b/i, "mining modules"],
+  [/\b(?:mining gadgets?|gadgets?)\b/i, "mining gadgets"],
+  [/\bquantum drives?\b/i, "quantum drives"],
+  [/\b(?:shield generators?|shields?)\b/i, "shield generators"],
+  [/\bpower plants?\b/i, "power plants"],
+  [/\bcoolers?\b/i, "coolers"],
+  [/\b(?:ship components?|equipment|components?)\b/i, "ship components"],
+  [/\b(?:personal weapons?|rifles?|pistols?|firearms?)\b/i, "personal weapons"],
+  [/\b(?:ship weapons?|vehicle weapons?|ship guns?|laser repeaters?|laser cannons?)\b/i, "vehicle weapons"],
+  [/\bhelmets?\b/i, "helmets"],
+  [/\bbackpacks?\b/i, "backpacks"],
+  [/\bundersuits?\b/i, "undersuits"],
+  [/\b(?:armou?r|helmets?|backpacks?|undersuits?)\b/i, "armor"],
+  [/\bweapons?\b/i, "weapons"],
+];
+
+export function isEquipmentQuery(text: string): boolean {
+  if (/\b(?:ship|vehicle)\s+(?:specs?|comparison|cargo)\b/i.test(text)) return false;
+  return EQUIPMENT_CATEGORIES.some(([pattern]) => pattern.test(text));
+}
+
+/** A named commodity immediately after buy/sell is a trade, even at a mining shop. */
+export function explicitCommodityTradeIntent(text: string, commodityMap: Map<string, Commodity>): "buy" | "sell" | undefined {
+  const match = text.match(/\b(buy|buying|purchase|purchasing|sell|selling|offload|unload)\s+(.+)/i);
+  if (!match) return undefined;
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const target = normalize(match[2]).replace(/^(?:some|the)\s+/, "").replace(/^\d+(?:\s+\d+)?\s*(?:scu|units?)?\s*(?:of\s+)?/, "");
+  const namedCommodity = [...new Set(commodityMap.values())].some((commodity) => [commodity.name, commodity.code].some((name) => {
+    const normalized = normalize(name || "");
+    return normalized.length >= 3 && (target === normalized || target.startsWith(`${normalized} `));
+  }));
+  return namedCommodity ? /^(?:sell|selling|offload|unload)$/i.test(match[1]) ? "sell" : "buy" : undefined;
+}
+
+export function parseTemporalFilters(text: string): Pick<ParsedQuery, "gameVersion" | "dateFrom" | "dateTo"> {
+  const gameVersion = text.match(/\b(?:game\s+version|version|patch|in)\s+v?(\d+\.\d+(?:\.\d+)?)(?![\d.])/i)?.[1];
+  const validDate = (value?: string) => value && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value ? value : undefined;
+  return {
+    gameVersion,
+    dateFrom: validDate(text.match(/\b(?:from|since|after)\s+(\d{4}-\d{2}-\d{2})\b/i)?.[1]),
+    dateTo: validDate(text.match(/\b(?:to|until|before|through)\s+(\d{4}-\d{2}-\d{2})\b/i)?.[1]),
+  };
+}
+
+function equipmentSubject(text: string): string {
+  // "Data on scraper modules" names a topic; "modules on Hurston" names a place.
+  return text.replace(/\b(?:data|information|info|details?|stats?|statistics|specs?|specifications)\s+(?:on|about|for)\s+/gi, "");
+}
+
+export function extractEquipmentLocation(text: string): string | undefined {
+  return extractMiningLocation(equipmentSubject(text));
+}
+
+export function parseEquipmentQuery(text: string): ParsedQuery {
+  const sizePattern = /\b(?:size[\s-]*(zero|one|two|three|four|five|six|seven|eight|nine|[0-9])|s\s?([0-9]))\b/i;
+  const sizeMatch = text.match(sizePattern);
+  const sizeToken = sizeMatch?.[1] || sizeMatch?.[2];
+  const sizeWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  const equipmentSize = sizeToken ? (/^\d$/.test(sizeToken) ? Number(sizeToken) : sizeWords.indexOf(sizeToken.toLowerCase())) : undefined;
+  const locationName = extractEquipmentLocation(text);
+  const equipmentCategory = EQUIPMENT_CATEGORIES.find(([pattern]) => pattern.test(text))?.[1];
+  let cleaned = equipmentSubject(text);
+  if (locationName) {
+    const index = cleaned.toLowerCase().indexOf(locationName.toLowerCase());
+    cleaned = cleaned.slice(0, index).replace(/\b(?:on|in|at|near|around)\s*$/i, "") + cleaned.slice(index + locationName.length);
+  }
+  const cleanName = (value: string) => value
+    .replace(sizePattern, " ")
+    .replace(/^(?:i|we)\s+(?:don['’]t|do not|can['’]t|cannot)\s+(?:see|find)\s+(?:any\s+)?/i, "")
+    .replace(/^(?:what|how) about\s+/i, "")
+    .replace(/^(?:can|could|should|do)\s+(?:i|we)\s+/i, "")
+    .replace(/^how much\s+(?:does|is)?\s*/i, "")
+    .replace(/^(?:(?:where|how|what|which)\s+(?:(?:can|do|does|should|is|are)\s*(?:i|we|the)?\s*|to\s+))/i, "")
+    .replace(/\b(?:compare|tell me about|show me|show|list|find|buy|purchase|sold|costs?|prices?|specs?|specifications|details|information|info|data|stats?|statistics|best|cheapest|all|available|of|for|the)\b/gi, " ")
+    .replace(/\b(?:(?:scrap{1,2}er|(?:hull\s+)?scraping|salvag(?:e|ing))\s+(?:modules?|beams?))\b/gi, " ")
+    .replace(/\b(?:mining\s+(?:laser\s+heads?|lasers?|heads?|modules?|gadgets?)|quantum\s+drives?|shield\s+generators?|shields?|power\s+plants?|coolers?|ship\s+components?|personal\s+weapons?|vehicle\s+weapons?|ship\s+weapons?|armou?r|helmets?|backpacks?|undersuits?|equipment)\b/gi, " ")
+    .replace(/\b(?:hey|hi|please|can|could|would|you|i|we|they|need|want|looking|look|which|what|where|how|do|does|is|are|shops?|stores?|vendors?|sellers?|sell|selling|stock|stocks|stocking|carry|carries|carrying|get|a|an|some|one|ones|them|it|that|slot|slots|to)\b/gi, " ")
+    .replace(/[?!."'@]/g, " ").replace(/\s+/g, " ").trim();
+  const comparing = /\b(?:compare|vs|versus|difference between)\b/i.test(text);
+  const parts = cleaned.replace(/\bdifference between\b/i, "").split(/\s+(?:vs\.?|versus|and)\s+/i);
+  const itemName = cleanName(parts[0] || "");
+  const itemName2 = comparing ? cleanName(parts[1] || "") : undefined;
+  return {
+    intent: comparing ? "equipment_compare" : /\b(?:buy|purchase|prices?|cost|where|shops?|stores?|vendors?|sellers?|stock|stocks|stocking|carry|carries|carrying|sell|selling)\b/i.test(text) || locationName ? "equipment_buy" : "equipment_info",
+    itemName: itemName || undefined,
+    itemName2: itemName2 || undefined,
+    equipmentCategory,
+    equipmentSize,
+    locationName,
+    modifiers: extractModifiers(text),
+    raw: text,
+    ...parseTemporalFilters(text),
+  };
+}
+
+/** Mining deposits are separate from trading ore, refining, and mining equipment. */
+export function isMiningLocationQuery(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (/\b(?:sell(?:ing)?|buy(?:ing)?|purchase|rent(?:al)?|refin\w*|outposts?|prices?|cost|worth|profit|history|trends?)\b/.test(lower)) return false;
+  if (/\bmining\s+(?:ships?|vehicles?|lasers?|equipment|tools?|modules?|gadgets?)\b/.test(lower)) return false;
+  if (/\b(?:ships?|vehicles?|lasers?|equipment|tools?|modules?|gadgets?)\b.*\b(?:mining|mine)\b/.test(lower)) return false;
+  if (/\b(?:mineable|minable)\s+commodities\b/.test(lower) && !/\b(?:on|in|at|near|around)\b/.test(lower)) return false;
+  return /\b(?:mine|mining|deposits?|mineable|minable)\b/.test(lower)
+    || /\b(?:ores?|minerals?|resources)\b.*\b(?:found|on|in|at|near|around)\b/.test(lower)
+    || /\b(?:where|which locations?)\b.*\b(?:ores?|found|occurs?|extract)\b/.test(lower)
+    || /\b(?:is|are)\b.+\b(?:found|present)\b/.test(lower);
+}
+
+/** Preserve names outside the trade-terminal catalogue for dynamic mining lookup. */
+export function extractMiningLocation(text: string): string | undefined {
+  const match = text.match(/\b(?:on|in|at|around|near|within)\s+(.+?)(?:[,?!;]|$)/i);
+  if (!match) return undefined;
+  const location = match[1]
+    .replace(/\s+(?:with|using|for|but|on|in|at)\b.*$/i, "")
+    .replace(/\s+(?:(?:can|could|would|should)\s+(?:i|we|you)|is|are|where)\b.*$/i, "")
+    .replace(/^(?:the|@)\s*/i, "")
+    .replace(/[.,]+$/, "")
+    .trim();
+  if (!location || /^(?:there|here|it|that|this|them|my ship)$/i.test(location)) return undefined;
+  return location;
+}
+
+export function isMiningInventoryQuery(text: string): boolean {
+  return /\b(?:what|which)\s+(?:ores?|minerals?|materials?|commodities|resources)\b/i.test(text)
+    || /\b(?:what|which)\s+(?:can|could)\s+i\s+mine\b/i.test(text)
+    || /^(?:(?:show|list)(?:\s+me)?(?:\s+all)?\s+)?(?:ores?|minerals?|resources)\s+(?:on|in|at|near|around)\b/i.test(text.trim());
+}
+
+/** Match actual commodity names/codes, never fuzzy fragments such as "ore" or "on". */
+export function parseMiningQuery(text: string, commodityMap: Map<string, Commodity>): ParsedQuery {
+  const locationName = extractMiningLocation(text);
+  const locationIndex = locationName ? text.toLowerCase().indexOf(locationName.toLowerCase()) : -1;
+  const commodityText = locationIndex >= 0
+    ? text.slice(0, locationIndex) + " " + text.slice(locationIndex + locationName!.length)
+    : text;
+  const normalized = ` ${commodityText.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const candidates = [...new Set(commodityMap.values())].flatMap((commodity) => {
+    const names = [commodity.name, commodity.code, commodity.name.replace(/\s*\((?:raw|ore|unrefined)\)\s*$/i, "")];
+    const lengths = names.map((name) => (name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim())
+      .filter((name) => name.length >= 3 && !COMMON_WORDS.has(name) && normalized.includes(` ${name} `))
+      .map((name) => name.length);
+    return lengths.length ? [{ commodity, length: Math.max(...lengths) }] : [];
+  }).sort((a, b) => b.length - a.length);
+  const commodity = isMiningInventoryQuery(text) ? undefined : candidates[0]?.commodity;
+  return {
+    intent: "mining_locations",
+    commodity,
+    commodities: commodity ? [commodity] : undefined,
+    locationName,
+    modifiers: extractModifiers(text),
+    raw: text,
+  };
+}
+
 function detectIntent(text: string): Intent {
   const lower = text.toLowerCase();
 
@@ -199,6 +377,7 @@ function detectIntent(text: string): Intent {
   }
 
   // Check refinery yields
+  if (/\brefin(?:e|ing)\b/.test(lower)) return "refinery_yields";
   for (const kw of REFINERY_YIELDS_KEYWORDS) {
     if (lower.includes(kw)) return "refinery_yields";
   }
@@ -214,6 +393,7 @@ function detectIntent(text: string): Intent {
   }
 
   // Check vehicle buy (before generic vehicle_info)
+  if (/\b(?:ships?|vehicles?)\b/.test(lower) && /\b(?:buy|purchase)\b/.test(lower) && !isEquipmentQuery(text)) return "vehicle_buy";
   for (const kw of VEHICLE_BUY_KEYWORDS) {
     if (lower.includes(kw)) return "vehicle_buy";
   }
@@ -308,6 +488,29 @@ export function extractModifiers(text: string): string[] {
   return MODIFIER_KEYWORDS.filter((m) => lower.includes(m));
 }
 
+/** Reference requests take precedence over equipment shopping and trading. */
+export function parseCraftingQuery(text: string): ParsedQuery | null {
+  const recipe = /\b(?:craft(?:ing)?|recipe|ingredients?|materials?\s+(?:do|to|for|needed|required)|need\s+to\s+(?:make|build))\b/i.test(text);
+  const blueprint = /\bblueprints?\b/i.test(text);
+  const mission = /\bmissions?\b/i.test(text);
+  const unlock = /\b(?:unlock|earn|obtain|reward|drop|complete|completion|get)\b/i.test(text);
+  if (!recipe && !blueprint && !mission) return null;
+  let intent: Intent = mission && !blueprint && !/\bunlock\b/i.test(text) ? "mission_info" : blueprint && (unlock || mission) ? "blueprint_unlock" : recipe ? "craft_recipe" : "blueprint_unlock";
+  if (mission && /\bunlock\b/i.test(text)) intent = "blueprint_unlock";
+  let name = text.trim().replace(/[?!.,]+$/, "");
+  if (intent === "craft_recipe") {
+    name = name.replace(/^.*?\b(?:craft(?:ing)?|recipe\s+for|(?:ingredients?|materials?)\s+(?:(?:needed|required)\s+)?for|need\s+(?:for|to\s+(?:craft|make|build)))\s+/i, "");
+  } else if (intent === "blueprint_unlock") {
+    name = name.replace(/^.*?\b(?:unlock|earn|obtain|get|reward|drop)\s+/i, "").replace(/^.*?\bblueprints?\s+(?:for|of)\s+/i, "");
+    if (name === text.trim().replace(/[?!.,]+$/, "")) name = name.replace(/^.*?\b(?:for|rewarding)\s+/i, "");
+  } else {
+    name = name.replace(/^(?:tell me about|show me|what (?:is|are)|details (?:on|about)|requirements for|how (?:do i|to) (?:unlock|start|complete))\s+/i, "").replace(/^missions?\s+(?:called|named|for)\s+/i, "");
+  }
+  name = name.replace(/^(?:(?:a|an|the)\s+)+/i, "").replace(/^blueprint\s+(?:for\s+)?/i, "").replace(/\s+(?:blueprints?|missions?)$/i, "").replace(/\s+quantum drive$/i, "").replace(/\bXL[ -]?(?:one|1)\b/ig, "XL-1").trim();
+  if (/^(?:it|its|that|that blueprint|its blueprint|missions?|blueprints?|what|how|which|all|show blueprints)$/i.test(name) || name.length > 160 || name === text.trim()) name = "";
+  return { intent, itemName: name || undefined, modifiers: [], raw: text };
+}
+
 export function parseQuery(
   text: string,
   commodityMap: Map<string, Commodity>,
@@ -315,8 +518,16 @@ export function parseQuery(
   terminals: Terminal[],
   vehicleMap: Map<string, Vehicle>
 ): ParsedQuery {
+  const crafting = parseCraftingQuery(text);
+  if (crafting) return crafting;
+  const commodityTradeIntent = explicitCommodityTradeIntent(text, commodityMap);
+  if (isEquipmentQuery(text) && !commodityTradeIntent) return parseEquipmentQuery(text);
+  if (isMiningLocationQuery(text)) return parseMiningQuery(text, commodityMap);
   const lower = text.toLowerCase();
-  let intent = detectIntent(lower);
+  let intent = commodityTradeIntent || detectIntent(lower);
+  if (/\b(?:buy\s+and\s+sell|sell\s+and\s+buy)\b/i.test(text)) intent = "price_check";
+  if (/\b(?:market|trade|price|stock|inventory)\s+(?:alerts?|anomalies|changes|updates)\b|\b(?:alerts?|anomalies)\s+(?:for|on|in|about)\b/i.test(text)) intent = "market_alerts";
+  else if (/\b(?:history|historical|trends?)\b|over time/i.test(text)) intent = "price_history";
   const modifiers = extractModifiers(lower);
 
   // Try to find commodity name(s) in the query, tracking consumed word indices
@@ -502,6 +713,7 @@ export function parseQuery(
     for (let windowSize = Math.min(8, words.length); windowSize >= 2; windowSize--) {
       for (let i = 0; i <= words.length - windowSize; i++) {
         const phrase = words.slice(i, i + windowSize).join(" ");
+        if (isCommonWord(phrase)) continue;
         const found = findTerminal(phrase, terminals);
         if (found) {
           terminal = found;
@@ -586,6 +798,12 @@ export function parseQuery(
     }
   }
 
+  const temporal = parseTemporalFilters(text);
+  if (["price_history", "market_alerts"].includes(intent)) {
+    const explicit = extractMiningLocation(text);
+    if (explicit && explicit !== temporal.gameVersion) locationName = explicit.replace(/\s+(?:from|since|after|until|through|before|patch|version)\b.*$/i, "").trim();
+  }
+
   return {
     intent,
     commodity,
@@ -602,6 +820,7 @@ export function parseQuery(
     category,
     modifiers,
     raw: text,
+    ...temporal,
   };
 }
 
@@ -614,8 +833,67 @@ const COMMON_WORDS = new Set([
   "ship", "ships", "about", "tell", "info", "much", "cargo",
   "compare", "price", "prices", "vs", "show", "all", "list",
   "have", "budget", "spend", "invest", "and", "or",
+  "mine", "mining", "ore", "ores", "mineral", "minerals", "found", "locations", "deposits",
 ]);
 
 function isCommonWord(word: string): boolean {
-  return COMMON_WORDS.has(word);
+  return word.split(/\s+/).every((part) => COMMON_WORDS.has(part));
+}
+
+/** Resolve full UEX geography only for requests that actually name a location. */
+export async function enrichQueryLocations(query: ParsedQuery): Promise<ParsedQuery> {
+  if (query.intent === "price_compare" && query.starSystem && query.starSystem2) return query;
+  const locationIntents = new Set<Intent>(["buy", "sell", "trade_route", "price_check", "price_history", "market_alerts", "profit_calc", "multi_hop", "budget_trade", "fleet_trade", "price_compare", "terminal_info", "station_info", "city_info", "outpost_info", "location_info", "location_trade", "refinery_yields", "fuel_prices", "vehicle_buy", "vehicle_rent", "equipment_info", "equipment_buy", "equipment_compare"]);
+  if (!locationIntents.has(query.intent)) return query;
+  let requested = query.locationName || (query.intent.startsWith("equipment_") ? extractEquipmentLocation(query.raw) : extractMiningLocation(query.raw));
+  if (["vehicle_buy", "vehicle_rent"].includes(query.intent)) {
+    requested = query.raw.match(/\b(?:at|in|on|near)\s+(.+?)(?:[?!;]|$)/i)?.[1].trim() || requested;
+  }
+  if (!requested && query.intent === "trade_route") requested = query.raw.match(/\bfrom\s+(.+?)(?:\s+to\s+|[?!]|$)/i)?.[1].trim();
+  if (!requested && query.intent === "location_info") requested = query.raw.replace(/^(?:tell me about|what is|what's|info on|info about)\s+/i, "").replace(/[?!]+$/, "").trim();
+  requested = requested?.replace(/\s+(?:from|since|after|until|through|before|patch|version)\b.*$/i, "").trim();
+  if (!requested || requested === query.gameVersion || /^(?:game|game version|auec|\d+(?:\.\d+)*|\d{4}-\d{2}-\d{2})$/i.test(requested)) return query;
+  if (/^(?:it|them|there|here|that location)$/i.test(requested)) return query;
+
+  const normalize = (name: string) => name.toLowerCase().replace(/[’']s\b/g, "").replace(/[^a-z0-9]/g, "");
+  const qualified = /\borbit\b/i.test(requested) ? "orbit" : /\b(?:poi|point of interest|asteroid (?:field|belt))\b/i.test(requested) ? "poi" : undefined;
+  const stripped = requested.replace(/\b(?:orbit|poi|point of interest|asteroid field|asteroid belt)\b/gi, "").replace(/[’']s\b/g, "").trim();
+  const search = normalize(stripped || requested);
+  type Candidate = { kind: "planet" | "moon" | "orbit" | "poi" | "system" | "terminal" | "city" | "station"; id: number; name: string; aliases?: (string | null | undefined)[]; value?: Terminal | StarSystem };
+  try {
+    const [{ getMiningData }, { getReferenceData }] = await Promise.all([import("@/lib/data/mining"), import("@/lib/data/cache")]);
+    const [geography, reference] = await Promise.all([getMiningData(), getReferenceData()]);
+    const candidates: Candidate[] = [
+      ...geography.planets.map((row) => ({ kind: "planet" as const, id: row.id, name: row.name })),
+      ...geography.moons.map((row) => ({ kind: "moon" as const, id: row.id, name: row.name })),
+      ...geography.orbits.map((row) => ({ kind: "orbit" as const, id: row.id, name: row.name })),
+      ...geography.pointsOfInterest.map((row) => ({ kind: "poi" as const, id: row.id, name: row.name })),
+      ...reference.starSystems.map((row) => ({ kind: "system" as const, id: row.id, name: row.name, value: row })),
+      ...reference.terminals.map((row) => ({ kind: "terminal" as const, id: row.id, name: row.name, aliases: [row.nickname, row.displayname, row.code], value: row })),
+      ...reference.terminals.filter((row) => row.city_name && row.id_city).map((row) => ({ kind: "city" as const, id: row.id_city, name: row.city_name! })),
+      ...reference.terminals.filter((row) => row.space_station_name && row.id_space_station).map((row) => ({ kind: "station" as const, id: row.id_space_station, name: row.space_station_name! })),
+    ];
+    const matches = candidates.filter((candidate) => [candidate.name, ...(candidate.aliases || [])].some((name) => name && normalize(name) === search));
+    const priority = [qualified, "moon", "planet", "city", "station", "system", "poi", "orbit", "terminal"].filter(Boolean);
+    matches.sort((a, b) => priority.indexOf(a.kind) - priority.indexOf(b.kind));
+    const shops = reference.terminals.filter(terminal => findTerminalByAlias(requested!, [terminal]));
+    const shop = shops.length === 1 ? shops[0] : undefined;
+    const selected = shop ? { kind: "terminal" as const, id: shop.id, name: shop.name, value: shop } : matches[0];
+    const cleared = { ...query, locationName: requested, locationError: undefined, planet: undefined, moon: undefined, orbit: undefined, poi: undefined, city: undefined, station: undefined, terminal: undefined, starSystem: undefined };
+    if (shops.length > 1) return { ...cleared, locationError: `I found multiple shops matching “${requested}”: ${shops.map(shop => shop.name).join("; ")}. Which location do you mean?` };
+    if (!selected) return { ...cleared, locationError: `I couldn't match “${requested}” to a UEX location. Please use a full planet, moon, orbit, point-of-interest, city, station, or terminal name.` };
+    switch (selected.kind) {
+      case "planet": return { ...cleared, planet: { planetName: selected.name, planetId: selected.id } };
+      case "moon": return { ...cleared, moon: { moonName: selected.name, moonId: selected.id } };
+      case "orbit": return { ...cleared, orbit: { orbitName: selected.name, orbitId: selected.id } };
+      case "poi": return { ...cleared, poi: { poiName: selected.name, poiId: selected.id } };
+      case "city": return { ...cleared, intent: query.intent === "location_info" ? "city_info" : query.intent, city: { cityName: selected.name, cityId: selected.id } };
+      case "station": return { ...cleared, intent: query.intent === "location_info" ? "station_info" : query.intent, station: { stationName: selected.name, stationId: selected.id } };
+      case "system": return { ...cleared, starSystem: selected.value as StarSystem };
+      case "terminal": return { ...cleared, terminal: selected.value as Terminal };
+    }
+  } catch {
+    if (query.planet || query.moon || query.terminal || query.starSystem) return query;
+    return { ...query, locationName: requested, locationError: `I couldn't verify the location “${requested}” because location data is temporarily unavailable. Please try again shortly.` };
+  }
 }

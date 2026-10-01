@@ -4,6 +4,14 @@ export type NamedTable = {
   rows: string[][];
 };
 
+export type PriceChartData = {
+  type: "line";
+  data: { label: string; buyPrice: number | null; sellPrice: number | null; timestamp?: number }[];
+  commodityName: string;
+  terminalName?: string;
+  gameVersion?: string;
+};
+
 export type Message = {
   id: string;
   role: "user" | "bot";
@@ -13,11 +21,7 @@ export type Message = {
     rows: string[][];
   };
   tables?: NamedTable[];
-  chart?: {
-    type: "line";
-    data: { label: string; buyPrice: number; sellPrice: number }[];
-    commodityName: string;
-  };
+  chart?: PriceChartData;
   map?: {
     system: string;
     routes: { from: string; to: string; profit: number; commodity: string }[];
@@ -50,6 +54,8 @@ export type ProfitData = {
   sellPrice: number;
   buyTerminal: string;
   sellTerminal: string;
+  cargoCapacity?: number;
+  assumptions?: string;
 };
 
 export type ChatResponse = {
@@ -59,11 +65,7 @@ export type ChatResponse = {
     rows: string[][];
   };
   tables?: NamedTable[];
-  chart?: {
-    type: "line";
-    data: { label: string; buyPrice: number; sellPrice: number }[];
-    commodityName: string;
-  };
+  chart?: PriceChartData;
   map?: {
     system: string;
     routes: { from: string; to: string; profit: number; commodity: string }[];

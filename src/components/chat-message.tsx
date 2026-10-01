@@ -4,9 +4,8 @@ import { useState, useMemo } from "react";
 import { Copy, Check, RotateCw, Download, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PriceChart } from "@/components/price-chart";
-import { ProfitDisplay } from "@/components/profit-display";
-import { SystemMap } from "@/components/system-map";
-import type { ProfitData, NamedTable } from "@/lib/types";
+import { safeImageUrl, tableToCsv, tableToTsv } from "@/lib/browser-output";
+import type { NamedTable, PriceChartData } from "@/lib/types";
 
 type ChatMessageProps = {
   role: "user" | "bot";
@@ -15,22 +14,12 @@ type ChatMessageProps = {
     headers: string[];
     rows: string[][];
   };
-  chart?: {
-    type: "line";
-    data: { label: string; buyPrice: number; sellPrice: number }[];
-    commodityName: string;
-  };
-  map?: {
-    system: string;
-    routes: { from: string; to: string; profit: number; commodity: string }[];
-    highlights: string[];
-  };
+  chart?: PriceChartData;
   image?: {
     url: string;
     alt: string;
     caption?: string;
   };
-  profit?: ProfitData;
   tables?: NamedTable[];
   isError?: boolean;
   isLLM?: boolean;
@@ -40,10 +29,7 @@ type ChatMessageProps = {
 };
 
 function downloadCsv(headers: string[], rows: string[][], filename: string) {
-  const csvContent = [
-    headers.join(","),
-    ...rows.map((r) => r.map((c) => `"${c.replace(/\{\{uex:[^}]+\}\}/g, "").replace(/"/g, '""')}"`).join(",")),
-  ].join("\n");
+  const csvContent = tableToCsv(headers, rows);
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -64,6 +50,8 @@ function SortableTable({
 }) {
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const isLongTable = rows.length > 6;
 
   const sortedRows = useMemo(() => {
     if (sortCol === null) return rows;
@@ -112,26 +100,31 @@ function SortableTable({
               {headers.map((h, i) => (
                 <th
                   key={i}
-                  onClick={() => handleSort(i)}
-                  className="px-3 py-2 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                  aria-sort={sortCol === i ? (sortAsc ? "ascending" : "descending") : "none"}
+                  className="px-3 py-2 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap"
                 >
-                  <span className="inline-flex items-center gap-1">
+                  <button type="button" onClick={() => handleSort(i)} className="inline-flex items-center gap-1 cursor-pointer hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring rounded">
                     {h}
                     <ArrowUpDown className={`h-3 w-3 ${sortCol === i ? "text-foreground" : "opacity-30"}`} />
-                  </span>
+                  </button>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row, i) => (
+            {(isLongTable && !expanded ? sortedRows.slice(0, 3) : sortedRows).map((row, i) => (
               <tr
                 key={i}
                 className="border-t border-border/50 hover:bg-muted/30 transition-colors"
               >
                 {row.map((cell, j) => (
-                  <td key={j} className="px-3 py-2 whitespace-nowrap">
-                    {renderInline(cell)}
+                  <td key={j} className="px-3 py-2 align-top whitespace-pre-wrap min-w-24 max-w-sm break-words">
+                    {cell.length > 240 ? (
+                      <details>
+                        <summary className="cursor-pointer text-xs font-medium rounded focus-visible:outline-2 focus-visible:outline-ring">Show details</summary>
+                        <div className="mt-2">{renderInline(cell)}</div>
+                      </details>
+                    ) : renderInline(cell)}
                   </td>
                 ))}
               </tr>
@@ -139,6 +132,12 @@ function SortableTable({
           </tbody>
         </table>
       </div>
+      {isLongTable && (
+        <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}
+          className="mt-2 text-xs font-medium text-foreground underline underline-offset-4 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">
+          {expanded ? "Show fewer rows" : `Show all ${rows.length} rows`}
+        </button>
+      )}
     </div>
   );
 }
@@ -148,34 +147,26 @@ export function ChatMessage({
   text,
   table,
   chart,
-  map,
   image,
-  profit,
   tables,
   isError,
-  isLLM,
   isStreaming,
   retryText,
   onRetry,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = role === "user";
+  const imageUrl = image ? safeImageUrl(image.url) : null;
 
   async function handleCopy() {
     let content = text;
     if (table) {
-      const tsv = [
-        table.headers.join("\t"),
-        ...table.rows.map((r) => r.join("\t")),
-      ].join("\n");
+      const tsv = tableToTsv(table.headers, table.rows);
       content += "\n\n" + tsv;
     }
     if (tables) {
       for (const t of tables) {
-        const tsv = [
-          t.headers.join("\t"),
-          ...t.rows.map((r) => r.join("\t")),
-        ].join("\n");
+        const tsv = tableToTsv(t.headers, t.rows);
         content += `\n\n${t.title}\n${tsv}`;
       }
     }
@@ -201,7 +192,7 @@ export function ChatMessage({
 
   if (isUser) {
     return (
-      <div className="flex justify-end py-3">
+      <div className="flex justify-end py-2">
         <div className="max-w-[80%] rounded-2xl bg-primary text-primary-foreground px-3 py-1.5">
           <p className="text-sm leading-relaxed">{text}</p>
         </div>
@@ -212,7 +203,7 @@ export function ChatMessage({
   const hasTableData = !!(table || (tables && tables.length > 0));
 
   return (
-    <div className="group flex gap-3 py-4 animate-in fade-in duration-300">
+    <div className="group flex gap-3 py-2 animate-in fade-in duration-300">
       {/* Bot avatar hidden */}
       <div className="flex-1 min-w-0">
         <div className="text-sm leading-relaxed text-foreground">
@@ -223,14 +214,15 @@ export function ChatMessage({
         </div>
 
         {/* Ship/Location Image */}
-        {image && (
+        {image && imageUrl && (
           <div className="mt-3 rounded-lg overflow-hidden border border-border max-w-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={image.url}
+              src={imageUrl}
               alt={image.alt}
               className="w-full h-auto object-cover"
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
             {image.caption && (
               <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30">
@@ -242,29 +234,7 @@ export function ChatMessage({
 
         {/* Price Chart */}
         {chart && (
-          <PriceChart data={chart.data} commodityName={chart.commodityName} />
-        )}
-
-        {/* Profit Calculator */}
-        {profit && (
-          <ProfitDisplay
-            shipName={profit.shipName}
-            commodityName={profit.commodityName}
-            scu={profit.scu}
-            buyPrice={profit.buyPrice}
-            sellPrice={profit.sellPrice}
-            buyTerminal={profit.buyTerminal}
-            sellTerminal={profit.sellTerminal}
-          />
-        )}
-
-        {/* System Map */}
-        {map && (
-          <SystemMap
-            system={map.system}
-            routes={map.routes}
-            highlights={map.highlights}
-          />
+          <PriceChart data={chart.data} commodityName={chart.commodityName} terminalName={chart.terminalName} gameVersion={chart.gameVersion} />
         )}
 
         {/* Data Table (sortable) */}
@@ -273,8 +243,13 @@ export function ChatMessage({
         )}
 
         {/* Multiple Named Tables (sortable) */}
-        {tables && tables.map((t, ti) => (
+        {tables && tables.map((t, ti) => ti === 0 ? (
           <SortableTable key={ti} headers={t.headers} rows={t.rows} title={t.title} />
+        ) : (
+          <details key={ti} className="mt-3 rounded-lg border border-border px-3 py-2">
+            <summary className="text-sm font-medium cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">{t.title} ({t.rows.length} rows)</summary>
+            <SortableTable headers={t.headers} rows={t.rows} title={t.title} />
+          </details>
         ))}
 
         {/* Action buttons */}
@@ -353,7 +328,7 @@ function renderMarkdown(text: string) {
 }
 
 function renderInline(text: string): React.ReactNode {
-  const parts = text.split(/(\{\{uex:[^}]+\}\}|\*\*[^*]+\*\*)/g);
+  const parts = text.split(/(\{\{(?:uex|wiki):[^}]+\}\}|\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
@@ -362,12 +337,17 @@ function renderInline(text: string): React.ReactNode {
         </strong>
       );
     }
+    if (part.startsWith("{{wiki:") && part.endsWith("}}")) {
+      const path = part.slice(7, -2);
+      if (!/^(?:blueprints|missions)\/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(path)) return null;
+      return <a key={i} href={`https://api.star-citizen.wiki/${path}`} target="_blank" rel="noopener noreferrer" title="View source on Star Citizen Wiki" className="inline-flex items-center ml-1 text-muted-foreground hover:text-foreground"><ArrowUpRight className="h-3 w-3" /></a>;
+    }
     if (part.startsWith("{{uex:") && part.endsWith("}}")) {
       const slug = part.slice(6, -2);
       return (
         <a
           key={i}
-          href={`https://uexcorp.space/commodities/info/name/${slug}/`}
+          href={`https://uexcorp.space/commodities/info/name/${encodeURIComponent(slug)}/`}
           target="_blank"
           rel="noopener noreferrer"
           title="View on UEX"

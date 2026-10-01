@@ -1,11 +1,29 @@
 import type { Conversation, Message } from "./types";
-import { v4 as uuidv4 } from "uuid";
 
 const STORAGE_KEY = "uex-chats";
 const MAX_CONVERSATIONS = 50;
+const REFERENCE_CHAT_KEY = "uex-reference-chat";
+
+export function loadReferenceChat(): Conversation | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = localStorage.getItem(REFERENCE_CHAT_KEY);
+    if (saved) return JSON.parse(saved) as Conversation;
+    // Migrate the latest chat without deleting the former chat archive.
+    const latest = loadConversations()[0];
+    if (latest) saveReferenceChat(latest);
+    return latest ?? null;
+  } catch { return null; }
+}
+
+export function saveReferenceChat(conversation: Conversation): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(REFERENCE_CHAT_KEY, JSON.stringify(conversation)); }
+  catch { /* Storage may be unavailable or full. */ }
+}
 
 export function generateId(): string {
-  return uuidv4();
+  return crypto.randomUUID();
 }
 
 export function loadConversations(): Conversation[] {

@@ -21,6 +21,22 @@ export type Commodity = {
   is_illegal: number;
   is_fuel: number;
   is_harvestable: number;
+  /** UEX occurrence locations, encoded as comma-separated IDs when known. */
+  ids_star_systems?: string | null;
+  ids_planets?: string | null;
+  ids_moons?: string | null;
+  ids_orbits?: string | null;
+  ids_poi?: string | null;
+  is_refinable?: number;
+  is_pure?: number;
+  is_volatile_qt?: number;
+  is_volatile_time?: number;
+  is_explosive?: number;
+  is_inert?: number;
+  is_buggy?: number;
+  wiki?: string | null;
+  date_added?: number;
+  date_modified?: number;
 };
 
 export type Terminal = {
@@ -54,6 +70,17 @@ export type Terminal = {
   has_freight_elevator: number;
   max_container_size: number;
   game_version: string;
+  id_poi?: number;
+  poi_name?: string | null;
+  fullname?: string;
+  is_auto_load?: number;
+  is_nqa?: number;
+  is_player_owned?: number;
+  is_affinity_influenceable?: number;
+  screenshot?: string | null;
+  screenshot_full?: string | null;
+  date_added?: number;
+  date_modified?: number;
 };
 
 export type StarSystem = {
@@ -78,6 +105,7 @@ export type CommodityPrice = {
   id_city: number;
   id_outpost: number;
   price_buy: number;
+  id_space_station?: number;
   price_buy_avg: number;
   price_sell: number;
   price_sell_avg: number;
@@ -88,9 +116,26 @@ export type CommodityPrice = {
   scu_sell_stock?: number;
   scu_sell_stock_avg?: number;
   /** Missing from commodities_raw_prices endpoint — treat undefined as valid */
-  status_buy?: number;
+  status_buy?: number | null;
   /** Missing from commodities_raw_prices endpoint — treat undefined as valid */
-  status_sell?: number;
+  status_sell?: number | null;
+  /** Reported remaining demand; distinct from inventory already at the terminal. */
+  scu_sell?: number;
+  scu_sell_avg?: number;
+  container_sizes?: string | null;
+  quality?: number | null;
+  game_version?: string | null;
+  date_added?: number;
+  id_poi?: number;
+  orbit_name?: string | null;
+  moon_name?: string | null;
+  space_station_name?: string | null;
+  city_name?: string | null;
+  outpost_name?: string | null;
+  poi_name?: string | null;
+  terminal_is_available?: number;
+  terminal_is_available_live?: number;
+  terminal_is_visible?: number;
   commodity_name: string;
   commodity_code: string;
   terminal_name: string;
@@ -98,6 +143,14 @@ export type CommodityPrice = {
   star_system_name: string;
   planet_name: string | null;
   date_modified: number;
+};
+
+/** Bulk prices omit geography and sometimes commodity/terminal codes. */
+export type CommodityPriceSummary = Omit<CommodityPrice,
+  "id_star_system" | "id_planet" | "id_orbit" | "id_moon" | "id_city" | "id_outpost" |
+  "star_system_name" | "planet_name" | "commodity_code" | "terminal_code"> & {
+  commodity_code?: string;
+  terminal_code?: string;
 };
 
 export type CommodityRoute = {
@@ -129,19 +182,34 @@ export type CommodityRoute = {
   has_freight_elevator_origin: number;
   has_freight_elevator_destination: number;
   date_added: number;
+  id_planet_origin?: number;
+  id_planet_destination?: number;
+  id_orbit_origin?: number;
+  id_orbit_destination?: number;
+  status_origin?: number | null;
+  status_destination?: number | null;
+  game_version_origin?: string | null;
+  game_version_destination?: string | null;
+  container_sizes_origin?: string | null;
+  container_sizes_destination?: string | null;
+  has_docking_port_origin?: number;
+  has_docking_port_destination?: number;
+  has_loading_dock_origin?: number;
+  has_loading_dock_destination?: number;
+  has_quantum_marker_origin?: number;
+  has_quantum_marker_destination?: number;
+  is_monitored_origin?: number;
+  is_monitored_destination?: number;
+  origin_orbit_name?: string | null;
+  destination_orbit_name?: string | null;
+  code?: string;
 };
 
-type UexResponse<T> = {
-  status: string;
-  http_code: number;
-  data: T[];
-  message?: string;
-};
-
-async function uexFetch<T>(
+async function fetchUexData(
   endpoint: string,
   params?: Record<string, string | number>
-): Promise<T[]> {
+): Promise<unknown> {
+  if (!/^[a-z][a-z0-9_]*$/.test(endpoint)) throw new Error("Invalid UEX endpoint");
   const url = new URL(`${BASE_URL}/${endpoint}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -160,27 +228,69 @@ async function uexFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url.toString(), { headers, next: { revalidate: 3600 } });
+  const res = await fetch(url.toString(), {
+    headers,
+    next: { revalidate: 3600, tags: ["uex-data"] },
+    signal: AbortSignal.timeout(15000),
+    redirect: "error",
+  });
 
   if (!res.ok) {
-    throw new Error(`UEX API error: ${res.status} ${res.statusText}`);
+    throw new Error(`UEX API error: ${res.status}`);
   }
 
-  const json: UexResponse<T> = await res.json();
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error("UEX API returned an invalid response");
+  }
 
-  if (json.status !== "ok") {
-    throw new Error(`UEX API returned status: ${json.status} - ${json.message}`);
+  if (!json || typeof json !== "object" || !("status" in json) || json.status !== "ok" ||
+      !("data" in json)) {
+    throw new Error("UEX API returned an invalid response");
   }
 
   return json.data;
+}
+
+export async function uexFetch<T>(endpoint: string, params?: Record<string, string | number>, options?: { allowEmpty?: boolean }): Promise<T[]> {
+  const data = await fetchUexData(endpoint, params);
+  // Some item categories legitimately have no records and UEX returns data: null.
+  if (data === null && options?.allowEmpty) return [];
+  if (!Array.isArray(data)) throw new Error("UEX API returned an invalid response");
+  return data as T[];
+}
+
+export async function uexFetchObject<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
+  const data = await fetchUexData(endpoint, params);
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("UEX API returned an invalid response");
+  return data as T;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
+/** Missing quantities stay unknown. Zero is a real reported quantity. */
+function normalizePrice<T extends CommodityPriceSummary>(row: T): T {
+  const result = { ...row };
+  const target = result as Record<string, unknown>;
+  for (const key of ["price_buy", "price_buy_avg", "price_sell", "price_sell_avg"]) target[key] = optionalNumber(target[key]) ?? 0;
+  for (const key of ["scu_buy", "scu_buy_avg", "scu_sell", "scu_sell_avg", "scu_sell_stock", "scu_sell_stock_avg", "status_buy", "status_sell", "quality", "date_added", "date_modified"]) {
+    target[key] = optionalNumber(target[key]);
+  }
+  return result;
 }
 
 export async function getCommodities(): Promise<Commodity[]> {
   return uexFetch<Commodity>("commodities");
 }
 
-export async function getCommodityPricesAll(): Promise<CommodityPrice[]> {
-  return uexFetch<CommodityPrice>("commodities_prices_all");
+export async function getCommodityPricesAll(): Promise<CommodityPriceSummary[]> {
+  return (await uexFetch<CommodityPriceSummary>("commodities_prices_all")).map(normalizePrice);
 }
 
 export async function getTerminals(
@@ -202,10 +312,10 @@ export async function getCommodityPrices(
     terminal_name: string;
   }>
 ): Promise<CommodityPrice[]> {
-  return uexFetch<CommodityPrice>(
+  return (await uexFetch<CommodityPrice>(
     "commodities_prices",
     params as Record<string, string | number>
-  );
+  )).map(normalizePrice);
 }
 
 export async function getCommodityRoutes(
@@ -267,6 +377,7 @@ export type CommodityPriceHistory = {
   status_sell: number | null;
   game_version: string;
   date_added: number;
+  date_modified?: number;
   commodity_name: string;
   terminal_name: string;
   star_system_name: string;
@@ -284,7 +395,7 @@ export type Vehicle = {
   width: number;
   height: number;
   length: number;
-  crew: number;
+  crew: string | null;
   fuel_quantum: number;
   fuel_hydrogen: number;
   container_sizes: string;
@@ -304,6 +415,23 @@ export type Vehicle = {
   is_quantum_capable: number;
   company_name: string;
   game_version: string;
+  id_parent?: number;
+  ids_vehicles_loaners?: string | null;
+  is_concept?: number;
+  is_addon?: number;
+  is_loading_dock?: number;
+  is_docking?: number;
+  is_refinery?: number;
+  is_military?: number;
+  is_industrial?: number;
+  is_tractor_beam?: number;
+  is_scanning?: number;
+  url_photo?: string | null;
+  url_store?: string | null;
+  url_brochure?: string | null;
+  url_video?: string | null;
+  date_added?: number;
+  date_modified?: number;
 };
 
 export type SpaceStation = {
@@ -333,6 +461,12 @@ export type SpaceStation = {
   has_docking_port: number;
   has_freight_elevator: number;
   pad_types: string;
+  is_available_live?: number;
+  is_visible?: number;
+  is_landable?: number;
+  is_decommissioned?: number;
+  has_quantum_marker?: number;
+  date_modified?: number;
 };
 
 export type City = {
@@ -358,6 +492,11 @@ export type City = {
   has_docking_port: number;
   has_freight_elevator: number;
   pad_types: string;
+  is_available_live?: number;
+  is_visible?: number;
+  is_monitored?: number;
+  has_quantum_marker?: number;
+  date_modified?: number;
 };
 
 export type Outpost = {
@@ -382,6 +521,14 @@ export type Outpost = {
   has_loading_dock: number;
   has_freight_elevator: number;
   pad_types: string;
+  is_available_live?: number;
+  is_visible?: number;
+  is_monitored?: number;
+  is_armistice?: number;
+  is_landable?: number;
+  is_decommissioned?: number;
+  has_quantum_marker?: number;
+  date_modified?: number;
 };
 
 export type ItemPrice = {
@@ -433,6 +580,7 @@ export async function getCommodityRanking(): Promise<CommodityRanking[]> {
 export async function getCommodityPriceHistory(params: {
   id_terminal: number;
   id_commodity: number;
+  game_version?: string;
 }): Promise<CommodityPriceHistory[]> {
   return uexFetch<CommodityPriceHistory>(
     "commodities_prices_history",
@@ -452,10 +600,10 @@ export async function getCommodityAverages(params: {
 export async function getCommodityRawPrices(params: {
   id_commodity: number;
 }): Promise<CommodityPrice[]> {
-  return uexFetch<CommodityPrice>(
+  return (await uexFetch<CommodityPrice>(
     "commodities_raw_prices",
     params as Record<string, string | number>
-  );
+  )).map(normalizePrice);
 }
 
 export async function getVehicles(
@@ -635,14 +783,17 @@ export async function getVehicleRentalPricesAll(): Promise<VehicleRentalPriceSum
   return uexFetch<VehicleRentalPriceSummary>("vehicles_rentals_prices_all");
 }
 
-// --- Planet & Moon types & functions ---
+// --- Mining location types & functions ---
 
 export type Planet = {
   id: number;
   id_star_system: number;
   name: string;
+  name_origin?: string;
   code: string;
   is_available: number;
+  is_available_live?: number;
+  is_visible?: number;
   star_system_name: string;
   faction_name: string | null;
 };
@@ -652,8 +803,11 @@ export type Moon = {
   id_star_system: number;
   id_planet: number;
   name: string;
+  name_origin?: string;
   code: string;
   is_available: number;
+  is_available_live?: number;
+  is_visible?: number;
   planet_name: string | null;
   star_system_name: string;
   faction_name: string | null;
@@ -665,4 +819,147 @@ export async function getPlanets(): Promise<Planet[]> {
 
 export async function getMoons(): Promise<Moon[]> {
   return uexFetch<Moon>("moons");
+}
+
+export type Orbit = {
+  id: number;
+  id_star_system: number;
+  name: string;
+  name_origin?: string;
+  code: string;
+  is_available: number;
+  is_available_live: number;
+  is_visible: number;
+  is_lagrange: number;
+  is_asteroid: number;
+  is_planet: number;
+  star_system_name: string | null;
+  date_modified?: number;
+};
+
+export type PointOfInterest = {
+  id: number;
+  id_star_system: number;
+  id_planet: number;
+  id_orbit: number;
+  id_moon: number;
+  id_space_station: number;
+  id_city: number;
+  id_outpost: number;
+  name: string;
+  nickname: string;
+  type?: string | null;
+  subtype?: string | null;
+  is_available: number;
+  is_available_live: number;
+  is_visible: number;
+  is_mining_related: number;
+  has_quantum_marker: number;
+  star_system_name: string | null;
+  planet_name: string | null;
+  orbit_name: string | null;
+  moon_name: string | null;
+  space_station_name: string | null;
+  outpost_name: string | null;
+  city_name: string | null;
+  is_monitored?: number;
+  is_armistice?: number;
+  is_landable?: number;
+  is_decommissioned?: number;
+  date_modified?: number;
+};
+
+export async function getOrbits(): Promise<Orbit[]> {
+  return uexFetch<Orbit>("orbits");
+}
+
+export async function getPointsOfInterest(): Promise<PointOfInterest[]> {
+  return uexFetch<PointOfInterest>("poi");
+}
+
+export type GameVersions = { live: string | null; ptu: string | null };
+
+export async function getGameVersions(): Promise<GameVersions> {
+  const data = await uexFetchObject<Record<string, unknown>>("game_versions");
+  return { live: typeof data.live === "string" ? data.live : null, ptu: typeof data.ptu === "string" ? data.ptu : null };
+}
+
+export type CommodityStatus = {
+  code: number;
+  name: string;
+  name_short: string;
+  name_abbr: string;
+  percentage: string;
+  percentage_start: number;
+  percentage_end: number;
+  colors: string;
+};
+export type CommodityStatuses = { buy: CommodityStatus[]; sell: CommodityStatus[] };
+
+export async function getCommodityStatuses(): Promise<CommodityStatuses> {
+  const data = await uexFetchObject<CommodityStatuses>("commodities_status");
+  if (!Array.isArray(data.buy) || !Array.isArray(data.sell)) throw new Error("UEX API returned an invalid response");
+  return data;
+}
+
+export type OrbitDistance = {
+  id_star_system_origin: number;
+  id_star_system_destination: number;
+  id_orbit_origin: number;
+  id_orbit_destination: number;
+  distance: number;
+  game_version?: string;
+  date_modified?: number;
+};
+
+export async function getOrbitDistances(originSystemId: number, destinationSystemId = originSystemId): Promise<OrbitDistance[]> {
+  const rows = await uexFetch<OrbitDistance>("orbits_distances", {
+    id_star_system_origin: originSystemId, id_star_system_destination: destinationSystemId,
+  });
+  return rows.flatMap((row) => {
+    const distance = optionalNumber(row.distance);
+    return distance !== undefined && distance >= 0 ? [{ ...row, distance }] : [];
+  });
+}
+
+export type TerminalDistance = {
+  terminal_name_origin: string;
+  terminal_name_destination: string;
+  orbit_name_origin: string | null;
+  orbit_name_destination: string | null;
+  distance: number | null;
+};
+
+export async function getTerminalDistance(originTerminalId: number, destinationTerminalId: number): Promise<TerminalDistance> {
+  const row = await uexFetchObject<TerminalDistance>("terminals_distances", {
+    id_terminal_origin: originTerminalId, id_terminal_destination: destinationTerminalId,
+  });
+  const distance = optionalNumber(row.distance);
+  return { ...row, distance: distance !== undefined && distance >= 0 ? distance : null };
+}
+
+export type JumpPoint = {
+  id: number;
+  id_star_system_origin: number;
+  id_star_system_destination: number;
+  id_orbit_origin: number;
+  id_orbit_destination: number;
+  star_system_origin_name: string;
+  star_system_destination_name: string;
+  orbit_origin_name: string | null;
+  orbit_destination_name: string | null;
+  date_modified?: number;
+};
+
+export async function getJumpPoints(): Promise<JumpPoint[]> {
+  const rows = await uexFetch<JumpPoint & { star_system_name_origin?: string; star_system_name_destination?: string }>("jump_points");
+  return rows.map((row) => ({ ...row,
+    star_system_origin_name: row.star_system_origin_name || row.star_system_name_origin || "Unknown",
+    star_system_destination_name: row.star_system_destination_name || row.star_system_name_destination || "Unknown",
+  }));
+}
+
+export type VehicleWithLoaners = Vehicle & { loaners: Vehicle[] };
+export async function getVehicleLoaners(idVehicle?: number): Promise<VehicleWithLoaners[]> {
+  return uexFetch<VehicleWithLoaners>("vehicles_loaners", idVehicle ? { id_vehicle: idVehicle } : undefined);
 }

@@ -18,9 +18,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UEX Trade Assistant",
+  title: "Star Citizen Reference",
   description:
-    "Star Citizen commodity trading assistant powered by UEX Corp data",
+    "Quick Star Citizen mining, ship, equipment, location and price lookups powered by UEX Corp data",
 };
 
 export default function RootLayout({

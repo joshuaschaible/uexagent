@@ -8,6 +8,8 @@ type ProfitDisplayProps = {
   sellPrice: number;
   buyTerminal: string;
   sellTerminal: string;
+  cargoCapacity?: number;
+  assumptions?: string;
 };
 
 export function ProfitDisplay({
@@ -18,6 +20,8 @@ export function ProfitDisplay({
   sellPrice,
   buyTerminal,
   sellTerminal,
+  cargoCapacity,
+  assumptions,
 }: ProfitDisplayProps) {
   const investment = buyPrice * scu;
   const revenue = sellPrice * scu;
@@ -27,7 +31,7 @@ export function ProfitDisplay({
   return (
     <div className="mt-3 rounded-lg border border-border p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-semibold">{commodityName} Profit Calculator</p>
+        <p className="text-sm font-semibold">{commodityName} Gross Profit Estimate</p>
         <span className="text-xs text-muted-foreground">{shipName} ({scu} SCU)</span>
       </div>
 
@@ -55,8 +59,10 @@ export function ProfitDisplay({
       </div>
 
       <div className="text-xs text-muted-foreground space-y-1">
+        {cargoCapacity !== undefined && <p>Planned load: {scu} / {cargoCapacity} SCU capacity</p>}
         <p>Buy at <strong>{buyTerminal}</strong> ({buyPrice.toLocaleString()} aUEC/SCU)</p>
         <p>Sell at <strong>{sellTerminal}</strong> ({sellPrice.toLocaleString()} aUEC/SCU)</p>
+        <p>{assumptions || "Before fuel, fees, and travel costs. Supply and demand may change."}</p>
       </div>
     </div>
   );

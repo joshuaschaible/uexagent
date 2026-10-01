@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 type Suggestion = {
   name: string;
-  type: "commodity" | "ship" | "system" | "planet" | "moon" | "station";
+  type: "commodity" | "ship" | "system" | "planet" | "moon" | "station" | "orbit" | "poi" | "item";
 };
 
 type TypeaheadProps = {
@@ -14,21 +14,29 @@ type TypeaheadProps = {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 };
 
-const TYPE_BADGES: Record<string, { label: string; className: string }> = {
-  commodity: { label: "Commodity", className: "bg-amber-500/20 text-amber-400" },
-  ship: { label: "Ship", className: "bg-blue-500/20 text-blue-400" },
-  system: { label: "System", className: "bg-purple-500/20 text-purple-400" },
-  planet: { label: "Planet", className: "bg-cyan-500/20 text-cyan-400" },
-  moon: { label: "Moon", className: "bg-indigo-500/20 text-indigo-400" },
-  station: { label: "Station", className: "bg-green-500/20 text-green-400" },
+const TYPE_BADGES: Record<string, { label: string }> = {
+  commodity: { label: "Commodity" },
+  ship: { label: "Ship" },
+  system: { label: "System" },
+  planet: { label: "Planet" },
+  moon: { label: "Moon" },
+  station: { label: "Station" },
+  orbit: { label: "Orbit / Lagrange" },
+  poi: { label: "Point of interest" },
+  item: { label: "Equipment" },
 };
+
+function validSuggestions(value: unknown): Suggestion[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Suggestion => item !== null && typeof item === "object"
+    && typeof item.name === "string" && typeof item.type === "string" && Object.hasOwn(TYPE_BADGES, item.type));
+}
 
 export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [plainSuggestions, setPlainSuggestions] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [mentionMode, setMentionMode] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const [resultsQuery, setResultsQuery] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Cache all mention items — fetched once, filtered client-side
@@ -36,17 +44,16 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
   const mentionCacheFetchedRef = useRef(false);
 
   // Detect @ mention trigger — allow multi-word queries after @
-  const getMentionQuery = useCallback((text: string): string | null => {
-    const match = text.match(/(?:^|\s)@(.*)$/);
-    return match ? match[1] : null;
-  }, []);
+  const mentionQuery = query.match(/(?:^|\s)@(.*)$/)?.[1] ?? null;
+  const mentionMode = mentionQuery !== null;
 
   // Fetch all mention items once and cache
   const ensureMentionCache = useCallback(async () => {
     if (mentionCacheFetchedRef.current) return mentionCacheRef.current;
     try {
       const res = await fetch("/api/suggest?q=*&typed=1");
-      const data: Suggestion[] = await res.json();
+      if (!res.ok) return [];
+      const data = validSuggestions(await res.json());
       mentionCacheRef.current = data;
       mentionCacheFetchedRef.current = true;
       return data;
@@ -59,8 +66,10 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
   const filterMentions = useCallback((allItems: Suggestion[], q: string): Suggestion[] => {
     if (!q) return allItems;
     const lower = q.toLowerCase();
+    const compact = lower.replace(/[^a-z0-9]/g, "");
     return allItems
-      .filter((s) => s.name.toLowerCase().includes(lower))
+      .filter((s) => s.name.toLowerCase().includes(lower)
+        || (compact.length > 0 && s.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(compact)))
       .sort((a, b) => {
         const aName = a.name.toLowerCase();
         const bName = b.name.toLowerCase();
@@ -77,75 +86,87 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
       });
   }, []);
 
-  const fetchPlainSuggestions = useCallback(async (q: string) => {
-    if (q.length < 2) {
-      setPlainSuggestions([]);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
-      const data: string[] = await res.json();
-      setPlainSuggestions(data);
-      setSuggestions([]);
-      setSelectedIndex(0);
-    } catch {
-      setPlainSuggestions([]);
-    }
-  }, []);
-
   useEffect(() => {
-    if (!visible) {
-      setSuggestions([]);
-      setPlainSuggestions([]);
-      setMentionMode(false);
-      return;
-    }
+    if (!visible) return;
+    let cancelled = false;
 
     // Check for @ mention
-    const mentionQuery = getMentionQuery(query);
     if (mentionQuery !== null) {
-      setMentionMode(true);
       // Fetch cache (no-op if already cached), then filter client-side
       ensureMentionCache().then((cached) => {
+        if (cancelled) return;
         const filtered = filterMentions(cached, mentionQuery.trim());
         setSuggestions(filtered);
         setPlainSuggestions([]);
         setSelectedIndex(0);
+        setResultsQuery(query);
       });
-      return;
+      // Typed lookups include geography and the independently loaded component catalogue.
+      const controller = new AbortController();
+      const timer = mentionQuery.trim().length >= 2 ? setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/suggest?q=${encodeURIComponent(mentionQuery.trim())}&typed=1`, { signal: controller.signal });
+          if (!res.ok) return;
+          const results = validSuggestions(await res.json());
+          await ensureMentionCache();
+          if (cancelled) return;
+          setSuggestions(filterMentions(results, mentionQuery.trim()));
+          setPlainSuggestions([]);
+          setSelectedIndex(0);
+          setResultsQuery(query);
+        } catch {
+          // Cached suggestions stay usable when expanded lookups are unavailable.
+        }
+      }, 200) : undefined;
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+        controller.abort();
+      };
     }
 
     // Regular typeahead on last word
-    setMentionMode(false);
-    setSuggestions([]);
     const lastWord = query.split(/\s+/).pop() || "";
-    if (lastWord.length < 2) {
-      setPlainSuggestions([]);
-      return;
-    }
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchPlainSuggestions(lastWord), 200);
+    if (lastWord.length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/suggest?q=${encodeURIComponent(lastWord)}`, { signal: controller.signal });
+        if (!res.ok) return;
+        const data: string[] = await res.json();
+        if (cancelled) return;
+        setPlainSuggestions(data);
+        setSuggestions([]);
+        setSelectedIndex(0);
+        setResultsQuery(query);
+      } catch {
+        // Obsolete or failed requests do not replace the current suggestions.
+      }
+    }, 200);
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, [query, visible, getMentionQuery, ensureMentionCache, filterMentions, fetchPlainSuggestions]);
+  }, [query, visible, mentionQuery, ensureMentionCache, filterMentions]);
 
   const allItems = useMemo(
-    () => (mentionMode ? suggestions.map((s) => s.name) : plainSuggestions),
-    [mentionMode, suggestions, plainSuggestions]
+    () => visible && resultsQuery === query
+      ? (mentionMode ? suggestions.map((s) => s.name) : plainSuggestions)
+      : [],
+    [visible, resultsQuery, query, mentionMode, suggestions, plainSuggestions]
   );
-
-  // Use refs so the keydown handler always has fresh values without re-attaching
-  const stateRef = useRef({ allItems, selectedIndex, mentionMode, onSelect, suggestions });
-  stateRef.current = { allItems, selectedIndex, mentionMode, onSelect, suggestions };
 
   useEffect(() => {
     if (allItems.length === 0) return;
 
     function handleKeyDown(e: KeyboardEvent) {
-      const { allItems: items, selectedIndex: idx, mentionMode: mention, onSelect: select, suggestions: sugs } = stateRef.current;
+      const items = allItems;
+      const idx = selectedIndex;
+      const mention = mentionMode;
+      const select = onSelect;
+      const sugs = suggestions;
       if (items.length === 0) return;
 
       const selectedType = mention && sugs[idx] ? sugs[idx].type : undefined;
@@ -175,7 +196,6 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
         e.stopPropagation();
         setSuggestions([]);
         setPlainSuggestions([]);
-        setMentionMode(false);
       }
     }
 
@@ -184,7 +204,7 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
       input.addEventListener("keydown", handleKeyDown, true);
       return () => input.removeEventListener("keydown", handleKeyDown, true);
     }
-  }, [allItems.length > 0, inputRef]); // Only re-attach when dropdown appears/disappears
+  }, [allItems, selectedIndex, mentionMode, onSelect, suggestions, inputRef]);
 
   // Auto-scroll selected item into view
   useEffect(() => {
@@ -207,7 +227,7 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
     >
       {mentionMode && (
         <div className="px-3 py-1.5 border-b border-border/50 text-[10px] text-muted-foreground uppercase tracking-wider">
-          Mention a commodity, ship, or location
+          Mention a commodity, ship, equipment item, or location
         </div>
       )}
       <div className="overflow-y-auto flex-1">
@@ -233,7 +253,7 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
                   <span className="truncate">{s.name}</span>
                   {badge && (
                     <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium ${badge.className}`}
+                      className="entity-label text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium"
                     >
                       {badge.label}
                     </span>
