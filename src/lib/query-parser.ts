@@ -801,7 +801,7 @@ export function parseQuery(
   const temporal = parseTemporalFilters(text);
   if (["price_history", "market_alerts"].includes(intent)) {
     const explicit = extractMiningLocation(text);
-    if (explicit && explicit !== temporal.gameVersion) locationName = explicit.replace(/\s+(?:from|since|after|until|through|before|patch|version)\b.*$/i, "").trim();
+    if (explicit && explicit !== temporal.gameVersion) locationName = explicit.replace(/\s+(?:(?:from|since|after|until|through|before)\b.*|(?:patch|version)\s+\d.*)$/i, "").trim();
   }
 
   return {
@@ -851,7 +851,7 @@ export async function enrichQueryLocations(query: ParsedQuery): Promise<ParsedQu
   }
   if (!requested && query.intent === "trade_route") requested = query.raw.match(/\bfrom\s+(.+?)(?:\s+to\s+|[?!]|$)/i)?.[1].trim();
   if (!requested && query.intent === "location_info") requested = query.raw.replace(/^(?:tell me about|what is|what's|info on|info about)\s+/i, "").replace(/[?!]+$/, "").trim();
-  requested = requested?.replace(/\s+(?:from|since|after|until|through|before|patch|version)\b.*$/i, "").trim();
+  requested = requested?.replace(/\s+(?:(?:from|since|after|until|through|before)\b.*|(?:patch|version)\s+\d.*)$/i, "").trim();
   if (!requested || requested === query.gameVersion || /^(?:game|game version|auec|\d+(?:\.\d+)*|\d{4}-\d{2}-\d{2})$/i.test(requested)) return query;
   if (/^(?:it|them|there|here|that location)$/i.test(requested)) return query;
 
@@ -859,21 +859,34 @@ export async function enrichQueryLocations(query: ParsedQuery): Promise<ParsedQu
   const qualified = /\borbit\b/i.test(requested) ? "orbit" : /\b(?:poi|point of interest|asteroid (?:field|belt))\b/i.test(requested) ? "poi" : undefined;
   const stripped = requested.replace(/\b(?:orbit|poi|point of interest|asteroid field|asteroid belt)\b/gi, "").replace(/[’']s\b/g, "").trim();
   const search = normalize(stripped || requested);
-  type Candidate = { kind: "planet" | "moon" | "orbit" | "poi" | "system" | "terminal" | "city" | "station"; id: number; name: string; aliases?: (string | null | undefined)[]; value?: Terminal | StarSystem };
+  type Candidate = { kind: "planet" | "moon" | "orbit" | "poi" | "system" | "terminal" | "city" | "station"; id: number; name: string; aliases?: (string | null | undefined)[]; scope?: string[]; value?: Terminal | StarSystem };
   try {
     const [{ getMiningData }, { getReferenceData }] = await Promise.all([import("@/lib/data/mining"), import("@/lib/data/cache")]);
     const [geography, reference] = await Promise.all([getMiningData(), getReferenceData()]);
+    const parentNames = (row: { id_star_system?: number; id_planet?: number; id_moon?: number; id_orbit?: number }) => [
+      reference.starSystems.find(parent => parent.id === row.id_star_system)?.name,
+      geography.planets.find(parent => parent.id === row.id_planet)?.name,
+      geography.moons.find(parent => parent.id === row.id_moon)?.name,
+      geography.orbits.find(parent => parent.id === row.id_orbit)?.name,
+    ].filter((name): name is string => Boolean(name));
     const candidates: Candidate[] = [
-      ...geography.planets.map((row) => ({ kind: "planet" as const, id: row.id, name: row.name })),
-      ...geography.moons.map((row) => ({ kind: "moon" as const, id: row.id, name: row.name })),
-      ...geography.orbits.map((row) => ({ kind: "orbit" as const, id: row.id, name: row.name })),
-      ...geography.pointsOfInterest.map((row) => ({ kind: "poi" as const, id: row.id, name: row.name })),
+      ...geography.planets.map((row) => ({ kind: "planet" as const, id: row.id, name: row.name, scope: parentNames(row) })),
+      ...geography.moons.map((row) => ({ kind: "moon" as const, id: row.id, name: row.name, scope: parentNames(row) })),
+      ...geography.orbits.map((row) => ({ kind: "orbit" as const, id: row.id, name: row.name, scope: parentNames(row) })),
+      ...geography.pointsOfInterest.map((row) => ({ kind: "poi" as const, id: row.id, name: row.name, scope: parentNames(row) })),
       ...reference.starSystems.map((row) => ({ kind: "system" as const, id: row.id, name: row.name, value: row })),
       ...reference.terminals.map((row) => ({ kind: "terminal" as const, id: row.id, name: row.name, aliases: [row.nickname, row.displayname, row.code], value: row })),
       ...reference.terminals.filter((row) => row.city_name && row.id_city).map((row) => ({ kind: "city" as const, id: row.id_city, name: row.city_name! })),
       ...reference.terminals.filter((row) => row.space_station_name && row.id_space_station).map((row) => ({ kind: "station" as const, id: row.id_space_station, name: row.space_station_name! })),
     ];
-    const matches = candidates.filter((candidate) => [candidate.name, ...(candidate.aliases || [])].some((name) => name && normalize(name) === search));
+    let matches = candidates.filter((candidate) => [candidate.name, ...(candidate.aliases || [])].some((name) => name && normalize(name) === search));
+    if (!matches.length) {
+      const parts = stripped.split(/\s+(?:in|on|at)\s+/i);
+      if (parts.length === 2) {
+        matches = candidates.filter(candidate => normalize(candidate.name) === normalize(parts[0])
+          && candidate.scope?.some(parent => normalize(parent) === normalize(parts[1])));
+      }
+    }
     const priority = [qualified, "moon", "planet", "city", "station", "system", "poi", "orbit", "terminal"].filter(Boolean);
     matches.sort((a, b) => priority.indexOf(a.kind) - priority.indexOf(b.kind));
     const shops = reference.terminals.filter(terminal => findTerminalByAlias(requested!, [terminal]));
@@ -881,6 +894,8 @@ export async function enrichQueryLocations(query: ParsedQuery): Promise<ParsedQu
     const selected = shop ? { kind: "terminal" as const, id: shop.id, name: shop.name, value: shop } : matches[0];
     const cleared = { ...query, locationName: requested, locationError: undefined, planet: undefined, moon: undefined, orbit: undefined, poi: undefined, city: undefined, station: undefined, terminal: undefined, starSystem: undefined };
     if (shops.length > 1) return { ...cleared, locationError: `I found multiple shops matching “${requested}”: ${shops.map(shop => shop.name).join("; ")}. Which location do you mean?` };
+    const sameKind = selected ? [...new Map(matches.filter(candidate => candidate.kind === selected.kind).map(candidate => [candidate.id, candidate])).values()] : [];
+    if (!shop && sameKind.length > 1) return { ...cleared, locationError: `I found multiple locations matching “${requested}”: ${sameKind.map(candidate => `${candidate.name} (${candidate.scope?.join(", ") || candidate.kind})`).join("; ")}. Which parent location do you mean?` };
     if (!selected) return { ...cleared, locationError: `I couldn't match “${requested}” to a UEX location. Please use a full planet, moon, orbit, point-of-interest, city, station, or terminal name.` };
     switch (selected.kind) {
       case "planet": return { ...cleared, planet: { planetName: selected.name, planetId: selected.id } };

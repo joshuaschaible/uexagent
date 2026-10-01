@@ -36,13 +36,13 @@ async function getSuggestions(request: Request) {
   const additional: Suggestion[] = [];
   if (q.length >= 2 || q === "*") {
     const [geographyResult, equipmentResult] = await Promise.allSettled([
-      q === "*" ? Promise.resolve(null) : import("@/lib/data/mining").then(({ getMiningData }) => getMiningData()),
+      import("@/lib/data/mining").then(({ getMiningData }) => getMiningData()),
       import("@/lib/equipment-client").then(({ getEquipmentSuggestions }) => getEquipmentSuggestions(q === "*" ? "" : q)),
     ]);
     if (geographyResult.status === "fulfilled" && geographyResult.value) {
       const geography = geographyResult.value;
       for (const [rows, type] of [[geography.planets, "planet"], [geography.moons, "moon"], [geography.orbits, "orbit"], [geography.pointsOfInterest, "poi"]] as const) {
-        for (const row of rows) if (row.name.toLowerCase().includes(q)) additional.push({ name: row.name, type });
+        for (const row of rows) if (q === "*" || row.name.toLowerCase().includes(q)) additional.push({ name: row.name, type });
       }
     }
     if (equipmentResult.status === "fulfilled") additional.push(...equipmentResult.value.map((item) => ({ name: item.name, type: "item" as const })));

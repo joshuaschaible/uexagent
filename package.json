@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "test:components": "node --test tests/component-catalogue.test.mjs",
-    "test:components:refresh": "node --env-file=.env.local scripts/refresh-component-fixture.mjs"
+    "test:components:refresh": "node --env-file=.env.local scripts/refresh-component-fixture.mjs",
+    "test:mentions": "node --test tests/mention-catalogue.test.mjs",
+    "test:mentions:refresh": "node --env-file=.env.local scripts/refresh-mention-fixture.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -24,6 +24,7 @@ These are implemented foundations, not new roadmap tasks:
 - [x] One continuous chat with preserved history; sidebar and fleet controls removed.
 - [x] Mining/refinery lookups, ship details and purchase/rental locations, equipment details and comparisons, location services, and reported commodity prices.
 - [x] Component mentions independent of previous questions, with spaces and hyphens matched interchangeably.
+- [x] Offline catalogue coverage for every eligible mention record, with shared insertion checks, canonical entity resolution, duplicate-name clarification, and parent-qualified points of interest.
 - [x] Shared neutral mention and badge styling in both themes.
 - [x] Equipment size filters: “size two,” “size 2,” and “S2,” joined to shop prices and locations.
 - [x] Unqualified “best” equipment questions ask for a comparison criterion.
@@ -137,7 +138,7 @@ Route-profit optimization, budget trading plans, multi-stop trade routes, fleet 
 
 ## Verification notes
 
-October 1: 554 automated tests (including 415 component catalogue cases), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
+October 1: 3,410 automated tests (including catalogue coverage for all nine mention types), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
 
 ## Completion rule
 

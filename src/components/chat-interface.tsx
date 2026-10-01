@@ -5,6 +5,7 @@ import { Send, RefreshCw, AtSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatMessage } from "@/components/chat-message";
 import { Typeahead } from "@/components/typeahead";
+import { insertMention } from "@/lib/mention-input";
 import { MentionBackdrop } from "@/components/mention-backdrop";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Message, Conversation } from "@/lib/types";
@@ -326,16 +327,7 @@ export function ChatInterface() {
 
   function handleTypeaheadSelect(value: string, isMention: boolean, type?: string) {
     if (isMention) {
-      // Replace @query (including multi-word) with the selected value
-      const mentionMatch = input.match(/^(.*?)(\s?)@.*$/);
-      if (mentionMatch) {
-        const prefix = mentionMatch[1];
-        const separator = prefix.length > 0 && !prefix.endsWith(" ") ? " " : "";
-        const newInput = prefix + separator + value + " ";
-        setInput(newInput);
-      } else {
-        setInput(value + " ");
-      }
+      setInput(insertMention(input, value, type));
       // Track mention for styled highlight
       if (type) {
         setMentions((prev) => [...prev, { value, type }]);

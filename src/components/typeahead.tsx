@@ -1,5 +1,6 @@
 "use client";
 
+import { filterMentionSuggestions } from "@/lib/mention-input";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 type Suggestion = {
@@ -63,28 +64,7 @@ export function Typeahead({ query, onSelect, visible, inputRef }: TypeaheadProps
   }, []);
 
   // Filter cached mentions client-side, sorted by relevance
-  const filterMentions = useCallback((allItems: Suggestion[], q: string): Suggestion[] => {
-    if (!q) return allItems;
-    const lower = q.toLowerCase();
-    const compact = lower.replace(/[^a-z0-9]/g, "");
-    return allItems
-      .filter((s) => s.name.toLowerCase().includes(lower)
-        || (compact.length > 0 && s.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(compact)))
-      .sort((a, b) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        // Exact match first
-        const aExact = aName === lower ? 1 : 0;
-        const bExact = bName === lower ? 1 : 0;
-        if (aExact !== bExact) return bExact - aExact;
-        // Starts-with before contains
-        const aStarts = aName.startsWith(lower) ? 1 : 0;
-        const bStarts = bName.startsWith(lower) ? 1 : 0;
-        if (aStarts !== bStarts) return bStarts - aStarts;
-        // Shorter names first (closer match)
-        return aName.length - bName.length;
-      });
-  }, []);
+  const filterMentions = filterMentionSuggestions;
 
   useEffect(() => {
     if (!visible) return;
