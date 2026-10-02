@@ -5,6 +5,7 @@ import { Copy, Check, RotateCw, Download, ArrowUpDown, ArrowUpRight } from "luci
 import { Button } from "@/components/ui/button";
 import { PriceChart } from "@/components/price-chart";
 import { safeImageUrl, tableToCsv, tableToTsv } from "@/lib/browser-output";
+import { isProgressionTable, progressionOptions, type ProgressionStep } from "@/lib/progression-display";
 import type { NamedTable, PriceChartData } from "@/lib/types";
 
 type ChatMessageProps = {
@@ -142,6 +143,67 @@ function SortableTable({
   );
 }
 
+function MissionCard({ step, number }: { step: ProgressionStep; number?: number }) {
+  const stopped = /stops here|not loaded|not expanded|not reported/i.test(step.instruction);
+  return <div className="rounded-xl border border-border bg-muted/20 p-3">
+    <div className="flex items-start gap-3">
+      {number !== undefined && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-xs font-semibold">{number}</span>}
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold break-words">{renderInline(step.name)}</div>
+        <div className="mt-1 text-sm text-foreground">{step.standing === "Not reported" ? "Standing not reported" : step.standing}</div>
+        {stopped && <p className="mt-2 text-sm font-medium">{step.instruction}</p>}
+        {!step.groups.length && !stopped && <p className="mt-1 text-xs text-muted-foreground">{step.instruction}</p>}
+      </div>
+    </div>
+  </div>;
+}
+
+function MissionBranch({ step }: { step: ProgressionStep }) {
+  return <div className="space-y-3">
+    {step.groups.map((group, index) => <div key={group.path} className="border-l-2 border-border pl-3 space-y-2">
+      <p className="text-sm font-medium">Prerequisite group {index + 1}</p>
+      <p className="text-xs text-muted-foreground">{group.requirement}</p>
+      {group.choices.length ? group.choices.map((child, choice) => <details key={child.path} open={group.choices.length === 1} className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring rounded">Choice {choice + 1}: {child.name.replace(/\{\{wiki:[^}]+\}\}/g, "")}</summary>
+        <div className="mt-3"><MissionBranch step={child} /></div>
+      </details>) : <p className="text-sm">No linked mission to expand this requirement.</p>}
+    </div>)}
+    {step.groups.length > 0 && <p className="text-xs text-muted-foreground">Then, after meeting the reported requirements:</p>}
+    <MissionCard step={step} />
+  </div>;
+}
+
+function MissionPath({ rows, title }: { rows: string[][]; title?: string }) {
+  const options = useMemo(() => progressionOptions(rows), [rows]);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? options : options.slice(0, 3);
+  return <section aria-label="Mission progression" className="mt-4 space-y-3">
+    <h3 className="text-sm font-semibold">{title || "Mission path"}</h3>
+    {options.length > 1 && <p className="text-xs text-muted-foreground">Choose an option below. These are alternative paths, not one combined checklist.</p>}
+    {visible.map((option, index) => {
+      const content = <>
+        {option.linear ? <ol className="space-y-0">{option.steps.map((step, i) => <li key={step.path}>
+          {i > 0 && <div aria-hidden="true" className="ml-6 h-5 border-l border-border" />}
+          <MissionCard step={step} number={i + 1} />
+        </li>)}</ol> : option.root ? <MissionBranch step={option.root} /> : <p className="text-sm">This option is incomplete. Review the reported details below.</p>}
+        <details className="mt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">Requirements, sources and patch details</summary>
+          <ul className="mt-2 space-y-2">{option.rows.map((row, i) => <li key={i} className="break-words"><span className="font-medium">{row[0]} · {renderInline(row[1])}</span><br />{row[3]} · Patch: {row[4]}</li>)}</ul>
+        </details>
+      </>;
+      return options.length === 1 ? <div key={option.label}>{content}</div> : <details key={option.label} open={index === 0} className="rounded-xl border border-border p-3">
+        <summary className="cursor-pointer text-sm font-medium rounded focus-visible:outline-2 focus-visible:outline-ring">{option.label}: {option.root?.name.replace(/\{\{wiki:[^}]+\}\}/g, "") || "Unresolved mission"}</summary>
+        <div className="mt-3">{content}</div>
+      </details>;
+    })}
+    {options.length > 3 && <button type="button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)} className="text-sm underline underline-offset-4 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">{showAll ? "Show fewer options" : `Show all ${options.length} options`}</button>}
+  </section>;
+}
+
+function ResponseData({ headers, rows, title }: { headers: string[]; rows: string[][]; title?: string }) {
+  return isProgressionTable(headers) ? <MissionPath rows={rows} title={title} /> : <SortableTable headers={headers} rows={rows} title={title} />;
+}
+
 export function ChatMessage({
   role,
   text,
@@ -239,16 +301,16 @@ export function ChatMessage({
 
         {/* Data Table (sortable) */}
         {table && (
-          <SortableTable headers={table.headers} rows={table.rows} />
+          <ResponseData headers={table.headers} rows={table.rows} />
         )}
 
         {/* Multiple Named Tables (sortable) */}
         {tables && tables.map((t, ti) => ti === 0 ? (
-          <SortableTable key={ti} headers={t.headers} rows={t.rows} title={t.title} />
+          <ResponseData key={ti} headers={t.headers} rows={t.rows} title={t.title} />
         ) : (
           <details key={ti} className="mt-3 rounded-lg border border-border px-3 py-2">
             <summary className="text-sm font-medium cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring">{t.title} ({t.rows.length} rows)</summary>
-            <SortableTable headers={t.headers} rows={t.rows} title={t.title} />
+            <ResponseData headers={t.headers} rows={t.rows} title={t.title} />
           </details>
         ))}
 

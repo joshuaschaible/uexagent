@@ -103,7 +103,7 @@ Acceptance:
 
 ### 5. Blueprint progression
 
-Status: **Implemented bounded first pass.** Recursive mission prerequisites, standing, alternative paths, reward-pool limitations, and recipe-to-progression follow-ups are available. Large or unresolved graphs are explicitly partial.
+Status: **Implemented bounded first pass.** Recursive mission prerequisites, standing, alternative paths, reward-pool limitations, and recipe-to-progression follow-ups are available. Simple chains use numbered mission cards; branching requirements and alternative options expand separately. Sources and raw requirement details remain available underneath. Large or unresolved graphs are explicitly partial.
 
 Goal: Explain the steps toward a blueprint in a short, useful sequence.
 
@@ -140,7 +140,7 @@ Route-profit optimization, budget trading plans, multi-stop trade routes, fleet 
 
 ## Verification notes
 
-October 1: 3,418 automated tests (including catalogue coverage for all nine mention types), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Live recipe → unlock → prerequisite follow-ups and a fresh named mission were also verified. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
+October 1: 3,421 automated tests (including catalogue coverage for all nine mention types), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Live recipe → unlock → prerequisite follow-ups and a fresh named mission were also verified. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
 
 ## Completion rule
 
