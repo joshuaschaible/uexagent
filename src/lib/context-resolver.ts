@@ -5,7 +5,7 @@ import type { Commodity, StarSystem, Vehicle } from "./uex-client";
 type HistoryMessage = { role: string; text: string };
 
 export function isExplicitFollowUp(text: string): boolean {
-  return /^(?:(?:what|how) about\b|and\b|same\b|(?:on|in|at|near|around)\b)|\b(?:it|its|them|there|those|where else|anywhere else|which one|that (?:item|equipment|location|ore|commodity|ship))\b/i.test(text);
+  return /^(?:(?:what|how) about\b|and\b|same\b|(?:on|in|at|near|around)\b)|\b(?:it|its|them|there|those|where else|anywhere else|which one|that (?:one|mission|blueprint|item|equipment|location|ore|commodity|ship))\b/i.test(text);
 }
 
 /**
@@ -26,13 +26,23 @@ export function resolveContext(
   const previous = previousIndex >= 0 ? parsePrevious(history[previousIndex].text) : undefined;
   const miningFollowUp = /^(?:(?:what|how) about\b|and\b|same\b|(?:on|in|at|near|around)\b)|\b(?:where else|it|them|there|that (?:ore|commodity|location))\b/i.test(current.raw)
     && !/\b(?:sell(?:ing)?|buy(?:ing)?|purchase|rent(?:al)?|refin\w*|ships?|vehicles?|outposts?|prices?)\b/i.test(current.raw);
-  const explicitFollowUp = isExplicitFollowUp(current.raw);
+  const explicitFollowUp = isExplicitFollowUp(current.raw) || (["blueprint_progression", "mission_prerequisites"].includes(current.intent) && /\b(?:that|this|those)\b/i.test(current.raw));
   const prior = previous && (miningFollowUp || explicitFollowUp)
     ? resolveContext(previous, history.slice(0, previousIndex), parsePrevious)
     : previous;
   const previousIsMining = prior?.intent === "mining_locations";
-  if (["craft_recipe", "blueprint_unlock", "mission_info"].includes(current.intent)) {
-    return { ...current, itemName: current.itemName || (explicitFollowUp && prior && ["craft_recipe", "blueprint_unlock", "equipment_info", "equipment_buy"].includes(prior.intent) ? prior.itemName : undefined) };
+  if (["craft_recipe", "blueprint_unlock", "blueprint_progression", "mission_info", "mission_prerequisites"].includes(current.intent)) {
+    const inherited = (explicitFollowUp || /\b(?:that|this|those)\b/i.test(current.raw)) && prior && ["craft_recipe", "blueprint_unlock", "blueprint_progression", "mission_info", "mission_prerequisites", "equipment_info", "equipment_buy"].includes(prior.intent) ? prior : undefined;
+    const lastAnswer = history.findLast(message => message.role === "bot" || message.role === "assistant")?.text || "";
+    const blueprintSubject = /Source: Star Citizen Wiki API\{\{wiki:blueprints\//.test(lastAnswer)
+      ? lastAnswer.match(/\*\*([^*\n]+) blueprint\*\*/)?.[1] || lastAnswer.match(/materials to craft \*\*([^*\n]+)\*\*/)?.[1] : undefined;
+    const missionSubject = /Source: Star Citizen Wiki API\{\{wiki:missions\//.test(lastAnswer)
+      ? lastAnswer.match(/^\*\*([^*\n]+)\*\*/)?.[1] : undefined;
+    const answerSubject = explicitFollowUp && !current.itemName ? blueprintSubject || missionSubject : undefined;
+    const blueprintFollowUp = current.intent === "mission_prerequisites" && !current.itemName
+      && ((inherited && ["craft_recipe", "blueprint_unlock", "blueprint_progression"].includes(inherited.intent)) || (explicitFollowUp && blueprintSubject));
+    return { ...current, intent: blueprintFollowUp ? "blueprint_progression" : current.intent,
+      itemName: current.itemName || inherited?.itemName || answerSubject, gameVersion: current.gameVersion || inherited?.gameVersion };
   }
 
 

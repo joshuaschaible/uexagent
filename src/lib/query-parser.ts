@@ -5,6 +5,8 @@ export type Intent =
   | "craft_recipe"
   | "blueprint_unlock"
   | "mission_info"
+  | "blueprint_progression"
+  | "mission_prerequisites"
   | "sell"
   | "buy"
   | "trade_route"
@@ -490,15 +492,20 @@ export function extractModifiers(text: string): string[] {
 
 /** Reference requests take precedence over equipment shopping and trading. */
 export function parseCraftingQuery(text: string): ParsedQuery | null {
+  const progression = /\b(?:prerequisites?|progression|mission chain|reward pool)\b/i.test(text) || (/\b(?:before|steps|guaranteed|possible reward)\b/i.test(text) && /\b(?:missions?|blueprints?|it|that|this|those)\b/i.test(text));
   const recipe = /\b(?:craft(?:ing)?|recipe|ingredients?|materials?\s+(?:do|to|for|needed|required)|need\s+to\s+(?:make|build))\b/i.test(text);
   const blueprint = /\bblueprints?\b/i.test(text);
   const mission = /\bmissions?\b/i.test(text);
   const unlock = /\b(?:unlock|earn|obtain|reward|drop|complete|completion|get)\b/i.test(text);
-  if (!recipe && !blueprint && !mission) return null;
+  if (!recipe && !blueprint && !mission && !progression) return null;
   let intent: Intent = mission && !blueprint && !/\bunlock\b/i.test(text) ? "mission_info" : blueprint && (unlock || mission) ? "blueprint_unlock" : recipe ? "craft_recipe" : "blueprint_unlock";
-  if (mission && /\bunlock\b/i.test(text)) intent = "blueprint_unlock";
+  if (mission && /\bunlock\b/i.test(text)) intent = blueprint ? "blueprint_unlock" : "mission_prerequisites";
+  if (progression) intent = blueprint ? "blueprint_progression" : "mission_prerequisites";
   let name = text.trim().replace(/[?!.,]+$/, "");
-  if (intent === "craft_recipe") {
+  if (intent === "blueprint_progression" || intent === "mission_prerequisites") {
+    name = name.replace(/^.*?\b(?:for|before|of)\s+/i, "").replace(/^(?:show me|show|explain)\s+(?:the\s+)?(?:steps|progression|prerequisites?|mission chain)\s*/i, "").replace(/^is\s+/i, "").replace(/\s+(?:a\s+)?guaranteed(?:\s+reward)?$/i, "");
+    if (/\b(?:it|its|that one|that mission|that blueprint|those missions|this blueprint)\b/i.test(name)) name = "";
+  } else if (intent === "craft_recipe") {
     name = name.replace(/^.*?\b(?:craft(?:ing)?|recipe\s+for|(?:ingredients?|materials?)\s+(?:(?:needed|required)\s+)?for|need\s+(?:for|to\s+(?:craft|make|build)))\s+/i, "");
   } else if (intent === "blueprint_unlock") {
     name = name.replace(/^.*?\b(?:unlock|earn|obtain|get|reward|drop)\s+/i, "").replace(/^.*?\bblueprints?\s+(?:for|of)\s+/i, "");

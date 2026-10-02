@@ -408,3 +408,32 @@ test("exact catalogue matches correct bare components mistaken for ship shopping
   const unknown = await classifyWithLLM("Where can I buy Imaginary888?", reference);
   assert.equal(unknown.intent, "vehicle_buy");
 });
+
+test("blueprint progression follow-ups keep the recipe subject and fresh subjects reset it", () => {
+  const history=["What materials do I need to craft an XL1?", "How do I unlock its blueprint?"];
+  const before=resolve("Which missions do I need before that one?",history);
+  assert.equal(before.intent,"blueprint_progression");
+  assert.equal(before.itemName,"XL-1");
+  assert.equal(parse("Is the XL1 blueprint guaranteed?").itemName,"XL-1");
+  const guaranteed=resolve("Is that guaranteed?",history);
+  assert.equal(guaranteed.intent,"blueprint_progression");
+  assert.equal(guaranteed.itemName,"XL-1");
+  const fresh=resolve("Show prerequisites for Idea for Isaac mission",history);
+  assert.equal(fresh.intent,"mission_prerequisites");
+  assert.equal(fresh.itemName,"Idea for Isaac");
+  const other=resolve("Show progression for the Abrade Scraper Module blueprint",history);
+  assert.equal(other.intent,"blueprint_progression");
+  assert.equal(other.itemName,"Abrade Scraper Module");
+  assert.equal(parse("Price history of Laranite before patch 4.9").intent,"price_history");
+});
+
+test("a sourced blueprint answer keeps explicit follow-ups when the original recipe has left recent history", () => {
+ const bot="One listed option for **XL-1 blueprint**. Source: Star Citizen Wiki API{{wiki:blueprints/e55162ea-cd69-4ace-a519-ffd40bfb78a9}}.";
+ const history=[{role:"user",text:"How do I unlock its blueprint?"},{role:"bot",text:bot},{role:"user",text:"Which missions do I need before that one?"},{role:"bot",text:bot}];
+ const result=resolveContext(parse("Is that guaranteed?"),history,parse);
+ assert.equal(result.intent,"blueprint_progression");assert.equal(result.itemName,"XL-1");
+ const fresh=resolveContext(parse("Show prerequisites for Idea for Isaac mission"),history,parse);
+ assert.equal(fresh.itemName,"Idea for Isaac");
+ const stale=resolveContext(parse("Is that guaranteed?"),[{role:"bot",text:"A commodity price report"}],parse);
+ assert.equal(stale.itemName,undefined);
+});

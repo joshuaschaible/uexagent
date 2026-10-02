@@ -103,7 +103,7 @@ Acceptance:
 
 ### 5. Blueprint progression
 
-Status: **Partially implemented.** Recipes, unlock missions, standing, immediate prerequisites, and reward pools exist; complete progression explanations do not.
+Status: **Implemented bounded first pass.** Recursive mission prerequisites, standing, alternative paths, reward-pool limitations, and recipe-to-progression follow-ups are available. Large or unresolved graphs are explicitly partial.
 
 Goal: Explain the steps toward a blueprint in a short, useful sequence.
 
@@ -111,13 +111,15 @@ Examples: “How do I unlock the XL-1 blueprint?” “Which missions do I need 
 
 Acceptance:
 
-- [ ] Trace available prerequisite missions into an understandable sequence.
-- [ ] Show faction standing and preserve alternative prerequisite paths.
-- [ ] Distinguish mission variants and alternative unlock routes from required mission chains.
-- [ ] Distinguish guaranteed rewards, reward pools, and unknown individual drop chances.
-- [ ] Stop and explain missing or unresolved prerequisite data.
-- [ ] Include source links and the game patch.
-- [ ] Verify recipe-to-unlock-to-prerequisite follow-ups in chat.
+- [x] Trace available prerequisite missions into an understandable sequence.
+- [x] Show faction standing and preserve alternative prerequisite paths.
+- [x] Distinguish mission variants and alternative unlock routes from required mission chains.
+- [x] Distinguish guaranteed rewards, reward pools, and unknown individual drop chances.
+- [x] Stop and explain missing or unresolved prerequisite data.
+- [x] Include source links and the game patch.
+- [x] Verify recipe-to-unlock-to-prerequisite follow-ups in chat.
+
+Limits: answers load at most 20 reward-mission variants, 48 mission records, eight prerequisite levels, and 200 progression rows. Missing links, cycles, and patch conflicts stop the affected branch. Completion tags without linked missions cannot be expanded. The source does not fully specify how multiple prerequisite groups combine, so the answer preserves them separately. A pool chance does not establish the chance of receiving a particular blueprint; no unsupported guarantee is inferred. Personalized mission completion tracking is not implemented.
 
 ## Sharing with friends: authentication
 
@@ -138,7 +140,7 @@ Route-profit optimization, budget trading plans, multi-stop trade routes, fleet 
 
 ## Verification notes
 
-October 1: 3,410 automated tests (including catalogue coverage for all nine mention types), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
+October 1: 3,418 automated tests (including catalogue coverage for all nine mention types), lint, and production build pass. Live chat checks cover equipment shopping, recipes, unlock missions, mining, and ship inventories. Live recipe → unlock → prerequisite follow-ups and a fresh named mission were also verified. Browser checks cover compact previews, expansion, keyboard sorting, light/dark themes, and a 390px viewport. Natural-language coverage is ongoing; these checks do not imply that every possible wording is supported. Shop stock remains unverified, and upstream security limitations remain documented in SECURITY.md.
 
 ## Completion rule
 

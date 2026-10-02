@@ -2198,7 +2198,7 @@ async function getHandlerResult(query: ParsedQuery): Promise<HandlerResult> {
 }
 
 export async function buildAnswer(query: ParsedQuery): Promise<ChatResponse> {
-  if (["craft_recipe", "blueprint_unlock", "mission_info"].includes(query.intent)) return buildCraftingAnswer(query);
+  if (["craft_recipe", "blueprint_unlock", "blueprint_progression", "mission_info", "mission_prerequisites"].includes(query.intent)) return buildCraftingAnswer(query);
   if (["trade_route", "profit_calc", "multi_hop", "budget_trade", "location_trade", "fleet_trade", "commodity_ranking"].includes(query.intent)) {
     return { text: 'This assistant focuses on game reference lookups, rather than route planning or projected profit. Ask where to buy or sell a commodity, where to mine an ore, or where to buy a ship or component.' };
   }

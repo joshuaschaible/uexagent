@@ -11,11 +11,12 @@ export type Blueprint = {
   is_available_by_default?: boolean; ingredients?: Ingredient[]; requirement_groups?: RequirementGroup[];
   unlocking_missions?: { title?: string; web_url?: string }[];
 };
+export type MissionReference = { title?: string; uuid?: string; link?: string; variants?: { uuid?: string; link?: string }[] };
 export type Mission = {
   uuid: string; title?: string; mission_giver?: string; star_systems?: string[]; game_version?: string;
   illegal?: boolean; once_only?: boolean; shareable?: boolean; reward_min?: number; reward_max?: number;
   reputation_prerequisite?: { faction?: string; scope?: string; min_standing?: { name?: string; min_reputation?: number } } | null;
-  prerequisite_groups?: { required_count?: number; required_tags?: { name?: string }[]; excluded_tags?: { name?: string }[]; missions?: { title?: string; uuid?: string }[] }[];
+  prerequisite_groups?: { required_count?: number; required_tags?: { name?: string }[]; excluded_tags?: { name?: string }[]; missions?: MissionReference[] }[];
   blueprints?: { drop_chance_percent?: number; items?: { name?: string; blueprint_link?: string }[] }[];
 };
 type Page<T> = { data: T[]; meta?: { total?: number } };

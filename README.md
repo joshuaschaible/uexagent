@@ -52,8 +52,10 @@ Blueprint recipes and mission unlock requirements use the public Star Citizen Wi
 - “What materials do I need to craft an XL-1 quantum drive?”
 - “How do I unlock the XL-1 blueprint?”
 - “Tell me about the Blackbox Retrieval mission”
+- “Which missions do I need before that one?”
+- “Show prerequisites for Idea for Isaac mission”
 
-Answers preserve SCU versus discrete item quantities, minimum material quality, alternative requirement groups, required standing, immediate mission prerequisites, and the source game patch. Blueprint pool drop chances are not represented as a guarantee of receiving a particular item. Ambiguous item names or mission variants require a more specific selection. Results include source links; missing fields and upstream failures do not generate guessed requirements. Recipes show the base recipe; tier-specific crafting and personalized mission progress are not implemented.
+Answers preserve SCU versus discrete item quantities, minimum material quality, alternative requirement groups, required standing, recursive mission prerequisites, and the source game patch. Progression keeps alternative paths and mission variants separate; missing links, cycles, and patch conflicts stop the affected branch. Large graphs are marked partial (up to 20 reward variants, 48 missions, eight levels, and 200 rows). Blueprint pool drop chances are not represented as a guarantee of receiving a particular item. Ambiguous item names or mission variants require a more specific selection. Results include source links; missing fields and upstream failures do not generate guessed requirements. Recipes show the base recipe; tier-specific crafting and personalized mission progress are not implemented.
 
 ### Component catalogue regression checks
 

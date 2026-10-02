@@ -6,7 +6,8 @@ const url = source => `data:text/javascript;base64,${Buffer.from(stripTypeScript
 const read = name => readFile(new URL(`../src/lib/${name}.ts`,import.meta.url),'utf8');
 const clientUrl = url(await read('game-wiki-client'));
 const client = await import(clientUrl);
-const {buildCraftingAnswer} = await import(url((await read('crafting-answer')).replace('"./game-wiki-client"',JSON.stringify(clientUrl))));
+const progressionUrl = url((await read("mission-progression")).replaceAll('"./game-wiki-client"',JSON.stringify(clientUrl)));
+const {buildCraftingAnswer} = await import(url((await read('crafting-answer')).replace('"./game-wiki-client"',JSON.stringify(clientUrl)).replace('"./mission-progression"',JSON.stringify(progressionUrl))));
 const bpId = 'e55162ea-cd69-4ace-a519-ffd40bfb78a9';
 const missionId = '0b400963-0b00-456a-bbc9-c036063cb6d8';
 const patch = '4.10.1-LIVE.12660092';
@@ -62,4 +63,20 @@ test('default blueprint does not require a mission or fetch mission details', as
  const answer=await buildCraftingAnswer(q('blueprint_unlock','default'));
  assert.match(answer.text,/available by default/);assert.equal(answer.table,undefined);
  assert.equal(calls.filter(u=>u.pathname.startsWith('/api/missions/')).length,before);
+});
+
+test("progression requests promote prerequisite paths while keeping reward alternatives available",async()=>{
+ const answer=await buildCraftingAnswer(q("blueprint_progression","XL-1"));
+ assert.equal(answer.table.headers[0],"Path / branch");
+ assert.ok(answer.table.rows.some(row=>row[3].includes("Mission link missing")));
+ assert.equal(answer.tables[0].title,"Alternative reward missions");
+ assert.match(answer.text,/no missing steps have been inferred/);
+ assert.match(answer.text,/specific blueprint not guaranteed/);
+});
+
+test("named prerequisite questions show the sequence first and rewards separately",async()=>{
+ const answer=await buildCraftingAnswer(q("mission_prerequisites",mission.title));
+ assert.equal(answer.table.headers[0],"Path / branch");
+ assert.equal(answer.tables[0].title,"Blueprint reward pools");
+ assert.ok(answer.table.rows.some(row=>row[2].includes("Master")));
 });
